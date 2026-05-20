@@ -4,6 +4,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Circle, Trash2, Tag, AlertTriangle } from 'lucide-react';
 import { Task, Status } from '../types';
+import { API_BASE_URL } from '../lib/config';
 
 interface TaskListProps {
   tasks: Task[];
@@ -14,7 +15,7 @@ export default function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
   const toggleStatus = async (task: Task) => {
     const newStatus: Status = task.status === 'Pending' ? 'Completed' : 'Pending';
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/tasks/${task.id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -27,7 +28,7 @@ export default function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
 
   const deleteTask = async (id: string) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/tasks/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/tasks/${id}`, {
         method: 'DELETE',
       });
       if (res.ok) onTaskUpdate();

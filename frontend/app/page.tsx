@@ -7,6 +7,7 @@ import TaskList from '../components/TaskList';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Task } from '../types';
 import { Sparkles } from 'lucide-react';
+import { API_BASE_URL } from '../lib/config';
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -14,7 +15,7 @@ export default function Home() {
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/tasks');
+      const res = await fetch(`${API_BASE_URL}/api/tasks`);
       if (res.ok) {
         const data = await res.json();
         setTasks(data);

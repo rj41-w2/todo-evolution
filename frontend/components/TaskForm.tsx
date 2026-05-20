@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Tag, Calendar, AlertCircle } from 'lucide-react';
 import { Priority, TaskCreate } from '../types';
+import { API_BASE_URL } from '../lib/config';
 
 interface TaskFormProps {
   onTaskCreated: () => void;
@@ -29,7 +30,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
     };
 
     try {
-      const res = await fetch('http://127.0.0.1:8000/api/tasks', {
+      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newTask),
