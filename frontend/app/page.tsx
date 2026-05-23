@@ -10,6 +10,7 @@ import { Task, TaskCreate, Status } from '../types';
 import { Sparkles, LogOut } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
+import Chatbot from '../components/Chatbot';
 
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -264,8 +265,11 @@ export default function Home() {
       {/* Footer Decoration */}
       <footer className="py-12 text-center opacity-20 pointer-events-none">
         <div className="h-px bg-gradient-to-r from-transparent via-foreground/20 to-transparent w-full max-w-xs mx-auto mb-4" />
-        <p className="text-[10px] font-bold tracking-[0.2em] uppercase">Phase II Deployment • Decoupled Architecture</p>
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase">Phase III Deployment • AI-Powered Chatbot</p>
       </footer>
+
+      {/* Floating Conversational AI Chatbot Assistant */}
+      <Chatbot onTaskMutation={fetchTasks} />
     </div>
   );
 }

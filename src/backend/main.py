@@ -236,10 +236,13 @@ def chat_with_agent(
         db.refresh(conversation)
 
     # 2. Get past messages in this conversation session ordered chronologically
+    # We limit history to the last 10 messages (5 turns) to ensure rapid response times
     messages = db.query(Message).filter(
         Message.conversation_id == conversation.id,
         Message.user_id == user_id
-    ).order_by(Message.created_at.asc()).all()
+    ).order_by(Message.created_at.desc()).limit(10).all()
+    # Reverse to restore proper chronological timeline order
+    messages.reverse()
 
     # 3. Save the new user message to the database
     user_msg_record = Message(
@@ -303,7 +306,7 @@ def chat_with_agent(
         """Mark a task as completed.
         
         Args:
-            task_id: The UUID string of the task to complete.
+            task_id: The UUID string of the task to complete, OR the task title name.
         """
         res = tools.complete_task(user_id=user_id, task_id=task_id)
         executed_tools.append({
@@ -317,7 +320,7 @@ def chat_with_agent(
         """Delete an existing task.
         
         Args:
-            task_id: The UUID string of the task to delete.
+            task_id: The UUID string of the task to delete, OR the task title name.
         """
         res = tools.delete_task(user_id=user_id, task_id=task_id)
         executed_tools.append({
@@ -331,7 +334,7 @@ def chat_with_agent(
         """Update an existing task's title, description, or priority.
         
         Args:
-            task_id: The UUID string of the task to update.
+            task_id: The UUID string of the task to update, OR the task title name.
             title: Optional new title.
             description: Optional new description.
             priority: Optional new priority ("Low", "Medium", "High").
@@ -341,6 +344,7 @@ def chat_with_agent(
             "tool": "update_task",
             "parameters": {"task_id": task_id, "title": title, "description": description, "priority": priority},
             "result": res
+
         })
         return res
 
@@ -356,6 +360,7 @@ Guidelines:
 2. Always summarize what was done in a natural, friendly, and professional tone.
 3. If the user addresses you in Urdu (Latin script or Arabic script), respond in a friendly hybrid Urdu/English (Hinglish/Urdu-English).
 4. Do not mention tool details or internal task IDs unless asked, but confirm the changes clearly (e.g. "I've marked the task 'Buy Groceries' as completed!").
+5. STRICT LATENCY CONSTRAINT: Keep your confirmation responses extremely short, concise, and direct (maximum 1 to 2 sentences). Avoid verbose conversational filler or greetings to maximize reply speed.
 """
 
         # Create the chat session

@@ -108,18 +108,27 @@ def complete_task(
     
     Args:
         user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to complete.
+        task_id: The UUID string of the task to complete, OR the task title name.
     """
     db = SessionLocal()
     try:
+        db_task = None
+        # 1. Try search by UUID
         try:
             task_uuid = uuid.UUID(task_id)
+            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
         except ValueError:
-            return {"error": f"Invalid task ID format '{task_id}'. Must be a UUID."}
+            pass
             
-        db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
+        # 2. Try search by title substring (case-insensitive)
         if not db_task:
-            return {"error": f"Task not found with ID '{task_id}' for this user."}
+            db_task = db.query(Task).filter(
+                Task.user_id == user_id,
+                Task.title.ilike(f"%{task_id}%")
+            ).order_by(Task.status.asc(), Task.created_at.desc()).first()
+            
+        if not db_task:
+            return {"error": f"Task not found with ID or name matching '{task_id}'."}
             
         db_task.status = StatusEnum.COMPLETED
         db.commit()
@@ -140,23 +149,32 @@ def delete_task(
     
     Args:
         user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to delete.
+        task_id: The UUID string of the task to delete, OR the task title name.
     """
     db = SessionLocal()
     try:
+        db_task = None
+        # 1. Try search by UUID
         try:
             task_uuid = uuid.UUID(task_id)
+            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
         except ValueError:
-            return {"error": f"Invalid task ID format '{task_id}'. Must be a UUID."}
+            pass
             
-        db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
+        # 2. Try search by title substring (case-insensitive)
         if not db_task:
-            return {"error": f"Task not found with ID '{task_id}' for this user."}
+            db_task = db.query(Task).filter(
+                Task.user_id == user_id,
+                Task.title.ilike(f"%{task_id}%")
+            ).order_by(Task.created_at.desc()).first()
+            
+        if not db_task:
+            return {"error": f"Task not found with ID or name matching '{task_id}'."}
             
         db.delete(db_task)
         db.commit()
         return {
-            "task_id": task_id,
+            "task_id": str(db_task.id),
             "status": "deleted",
             "title": db_task.title
         }
@@ -174,21 +192,30 @@ def update_task(
     
     Args:
         user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to update.
+        task_id: The UUID string of the task to update, OR the task title name.
         title: Optional new title.
         description: Optional new description.
         priority: Optional new priority ("Low", "Medium", "High").
     """
     db = SessionLocal()
     try:
+        db_task = None
+        # 1. Try search by UUID
         try:
             task_uuid = uuid.UUID(task_id)
+            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
         except ValueError:
-            return {"error": f"Invalid task ID format '{task_id}'. Must be a UUID."}
+            pass
             
-        db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
+        # 2. Try search by title substring (case-insensitive)
         if not db_task:
-            return {"error": f"Task not found with ID '{task_id}' for this user."}
+            db_task = db.query(Task).filter(
+                Task.user_id == user_id,
+                Task.title.ilike(f"%{task_id}%")
+            ).order_by(Task.created_at.desc()).first()
+            
+        if not db_task:
+            return {"error": f"Task not found with ID or name matching '{task_id}'."}
             
         if title is not None:
             db_task.title = title
@@ -214,3 +241,4 @@ def update_task(
         }
     finally:
         db.close()
+

@@ -29,3 +29,22 @@ export interface TaskUpdate {
   tags?: string[];
   due_date?: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+export interface ToolCall {
+  tool: string;
+  parameters: Record<string, any>;
+  result: Record<string, any>;
+}
+
+export interface ChatResponse {
+  conversation_id: string;
+  response: string;
+  tool_calls: ToolCall[];
+}
