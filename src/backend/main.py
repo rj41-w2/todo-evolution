@@ -7,8 +7,15 @@ from sqlalchemy.orm import Session
 import jwt
 from jwt import PyJWKClient
 
+from google import genai
+from google.genai import types
+import tools
+
 from database import engine, get_db, Base
-from models import Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum
+from models import (
+    Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
+    Conversation, Message, ChatRequest, ChatResponse
+)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -188,4 +195,214 @@ def delete_task(
     db.delete(db_task)
     db.commit()
     return None
+
+@app.post("/api/{user_id}/chat", response_model=ChatResponse)
+def chat_with_agent(
+    user_id: str,
+    chat_req: ChatRequest,
+    db: Session = Depends(get_db),
+    authenticated_user_id: str = Depends(get_current_user)
+):
+    # Enforce multi-tenant access: user cannot chat as another user ID
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    # Lazy check for GEMINI_API_KEY
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GEMINI_API_KEY is not configured on the backend server. Please add it to your .env file."
+        )
+
+    # 1. Retrieve or create the conversation session
+    if chat_req.conversation_id:
+        conversation = db.query(Conversation).filter(
+            Conversation.id == chat_req.conversation_id,
+            Conversation.user_id == user_id
+        ).first()
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation session not found"
+            )
+    else:
+        conversation = Conversation(user_id=user_id)
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    # 2. Get past messages in this conversation session ordered chronologically
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation.id,
+        Message.user_id == user_id
+    ).order_by(Message.created_at.asc()).all()
+
+    # 3. Save the new user message to the database
+    user_msg_record = Message(
+        user_id=user_id,
+        conversation_id=conversation.id,
+        role="user",
+        content=chat_req.message
+    )
+    db.add(user_msg_record)
+    db.commit()
+    db.refresh(user_msg_record)
+
+    # 4. Construct Gemini conversation history structure
+    gemini_history = []
+    for msg in messages:
+        # Translate role to Gemini's expected role: "user" or "model"
+        role = "user" if msg.role == "user" else "model"
+        gemini_history.append(
+            types.Content(
+                role=role,
+                parts=[types.Part.from_text(text=msg.content)]
+            )
+        )
+
+    # 5. Define dynamic local tools bound to current verified user_id (for zero-leak multi-tenancy)
+    executed_tools = []
+
+    def add_task_tool(title: str, description: str = None, priority: str = None, tags: list[str] = None) -> dict:
+        """Create a new todo task.
+        
+        Args:
+            title: The title of the task.
+            description: An optional description.
+            priority: Optional priority ("Low", "Medium", "High").
+            tags: Optional list of tags.
+        """
+        res = tools.add_task(user_id=user_id, title=title, description=description, priority=priority, tags=tags)
+        executed_tools.append({
+            "tool": "add_task",
+            "parameters": {"title": title, "description": description, "priority": priority, "tags": tags},
+            "result": res
+        })
+        return res
+
+    def list_tasks_tool(status: str = None, priority: str = None) -> list[dict]:
+        """Fetch tasks with optional status and priority filters.
+        
+        Args:
+            status: Optional status ("all", "pending", "completed").
+            priority: Optional priority ("Low", "Medium", "High").
+        """
+        res = tools.list_tasks(user_id=user_id, status=status, priority=priority)
+        executed_tools.append({
+            "tool": "list_tasks",
+            "parameters": {"status": status, "priority": priority},
+            "result": res
+        })
+        return res
+
+    def complete_task_tool(task_id: str) -> dict:
+        """Mark a task as completed.
+        
+        Args:
+            task_id: The UUID string of the task to complete.
+        """
+        res = tools.complete_task(user_id=user_id, task_id=task_id)
+        executed_tools.append({
+            "tool": "complete_task",
+            "parameters": {"task_id": task_id},
+            "result": res
+        })
+        return res
+
+    def delete_task_tool(task_id: str) -> dict:
+        """Delete an existing task.
+        
+        Args:
+            task_id: The UUID string of the task to delete.
+        """
+        res = tools.delete_task(user_id=user_id, task_id=task_id)
+        executed_tools.append({
+            "tool": "delete_task",
+            "parameters": {"task_id": task_id},
+            "result": res
+        })
+        return res
+
+    def update_task_tool(task_id: str, title: str = None, description: str = None, priority: str = None) -> dict:
+        """Update an existing task's title, description, or priority.
+        
+        Args:
+            task_id: The UUID string of the task to update.
+            title: Optional new title.
+            description: Optional new description.
+            priority: Optional new priority ("Low", "Medium", "High").
+        """
+        res = tools.update_task(user_id=user_id, task_id=task_id, title=title, description=description, priority=priority)
+        executed_tools.append({
+            "tool": "update_task",
+            "parameters": {"task_id": task_id, "title": title, "description": description, "priority": priority},
+            "result": res
+        })
+        return res
+
+    # 6. Initialize Gemini client and trigger automatic function calling loop
+    try:
+        client = genai.Client(api_key=api_key)
+        
+        system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
+Your job is to help the user manage their tasks (add, update, delete, complete, and list tasks) using your available tools.
+
+Guidelines:
+1. When user requests an action (e.g., adding, completing, updating, deleting, listing tasks), invoke the appropriate tool.
+2. Always summarize what was done in a natural, friendly, and professional tone.
+3. If the user addresses you in Urdu (Latin script or Arabic script), respond in a friendly hybrid Urdu/English (Hinglish/Urdu-English).
+4. Do not mention tool details or internal task IDs unless asked, but confirm the changes clearly (e.g. "I've marked the task 'Buy Groceries' as completed!").
+"""
+
+        # Create the chat session
+        chat = client.chats.create(
+            model="gemini-2.5-flash",
+            history=gemini_history,
+            config=types.GenerateContentConfig(
+                tools=[
+                    add_task_tool,
+                    list_tasks_tool,
+                    complete_task_tool,
+                    delete_task_tool,
+                    update_task_tool
+                ],
+                system_instruction=system_instruction,
+                temperature=0.7
+            )
+        )
+        
+        # Send user message and get final response
+        response = chat.send_message(chat_req.message)
+        response_text = response.text or "I have processed your request."
+        
+    except Exception as e:
+        print(f"[DEBUG GEMINI ERROR] Error during Gemini generation: {str(e)}")
+        # Delete user message from history on failure to keep conversational consistency
+        db.delete(user_msg_record)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"AI Chatbot service error: {str(e)}"
+        )
+
+    # 7. Persist the assistant's final response turn to the database
+    assistant_msg_record = Message(
+        user_id=user_id,
+        conversation_id=conversation.id,
+        role="assistant",
+        content=response_text
+    )
+    db.add(assistant_msg_record)
+    db.commit()
+
+    # 8. Return response model
+    return ChatResponse(
+        conversation_id=conversation.id,
+        response=response_text,
+        tool_calls=executed_tools
+    )
 

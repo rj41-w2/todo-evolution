@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum
+from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,24 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     due_date = Column(DateTime, nullable=True)
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=False, index=True)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String, nullable=False) # "user" or "assistant"
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # --- Pydantic Schemas ---
 
 class TaskBase(BaseModel):
@@ -60,6 +78,12 @@ class TaskResponse(TaskBase):
 
     class Config:
         from_attributes = True
-        # json_encoders = {
-        #     uuid.UUID: lambda v: str(v)
-        # }
+
+class ChatRequest(BaseModel):
+    conversation_id: Optional[uuid.UUID] = None
+    message: str
+
+class ChatResponse(BaseModel):
+    conversation_id: uuid.UUID
+    response: str
+    tool_calls: List[dict] = []
