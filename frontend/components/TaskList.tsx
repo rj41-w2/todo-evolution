@@ -8,34 +8,11 @@ import { API_BASE_URL } from '../lib/config';
 
 interface TaskListProps {
   tasks: Task[];
-  onTaskUpdate: () => void;
+  onToggleStatus: (task: Task) => Promise<void>;
+  onDeleteTask: (id: string) => Promise<void>;
 }
 
-export default function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
-  const toggleStatus = async (task: Task) => {
-    const newStatus: Status = task.status === 'Pending' ? 'Completed' : 'Pending';
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/tasks/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) onTaskUpdate();
-    } catch (error) {
-      console.error('Failed to update task:', error);
-    }
-  };
-
-  const deleteTask = async (id: string) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/tasks/${id}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) onTaskUpdate();
-    } catch (error) {
-      console.error('Failed to delete task:', error);
-    }
-  };
+export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskListProps) {
 
   const priorityConfig = {
     High: { color: 'text-rose-500', glow: 'shadow-rose-500/20', icon: <AlertTriangle className="h-3 w-3" /> },
@@ -65,7 +42,7 @@ export default function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
                   {task.priority}
                 </div>
                 <button
-                  onClick={() => deleteTask(task.id)}
+                  onClick={() => onDeleteTask(task.id)}
                   className="opacity-0 group-hover:opacity-100 p-1.5 text-foreground/20 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -96,7 +73,7 @@ export default function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
               </span>
               
               <button
-                onClick={() => toggleStatus(task)}
+                onClick={() => onToggleStatus(task)}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
                   task.status === 'Completed'
                     ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'

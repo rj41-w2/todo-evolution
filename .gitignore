@@ -1,2 +1,13 @@
 __pycache__
 .env
+
+
+Hackathon II - Todo Spec-Driven Development.md
+
+node_modules
+.next
+.turbo
+.bun
+.venv
+database.db
+database.sqlite

@@ -7,7 +7,7 @@ import { Priority, TaskCreate } from '../types';
 import { API_BASE_URL } from '../lib/config';
 
 interface TaskFormProps {
-  onTaskCreated: () => void;
+  onTaskCreated: (task: TaskCreate) => Promise<void>;
 }
 
 export default function TaskForm({ onTaskCreated }: TaskFormProps) {
@@ -15,37 +15,28 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('Medium');
   const [tags, setTags] = useState('');
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!title.trim()) return;
 
     const newTask: TaskCreate = {
-      title,
-      description,
+      title: title.trim(),
+      description: description.trim() || undefined,
       priority,
       tags: tags.split(',').map(t => t.trim()).filter(t => t !== ''),
       status: 'Pending'
     };
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask),
-      });
+    // Instant feedback: clear the fields immediately!
+    setTitle('');
+    setDescription('');
+    setTags('');
 
-      if (res.ok) {
-        setTitle('');
-        setDescription('');
-        setTags('');
-        onTaskCreated();
-      }
+    try {
+      await onTaskCreated(newTask);
     } catch (error) {
-      console.error('Failed to create task:', error);
-    } finally {
-      setLoading(false);
+      console.error('Failed to create task optimistically:', error);
     }
   };
 
@@ -103,11 +94,11 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
 
           <button
             type="submit"
-            disabled={loading || !title}
+            disabled={!title}
             className="ml-auto glow-primary bg-indigo-600 hover:bg-indigo-500 disabled:bg-foreground/10 disabled:text-foreground/30 disabled:shadow-none text-white px-6 py-2 rounded-full font-semibold flex items-center gap-2 transition-all active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            {loading ? 'Adding...' : 'Add Task'}
+            Add Task
           </button>
         </div>
       </form>

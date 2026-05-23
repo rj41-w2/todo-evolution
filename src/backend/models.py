@@ -23,6 +23,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, nullable=True, index=True) # nullable=True to support backward compatibility
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.PENDING)
@@ -40,6 +41,7 @@ class TaskBase(BaseModel):
     priority: PriorityEnum = PriorityEnum.MEDIUM
     tags: List[str] = []
     due_date: Optional[datetime] = None
+    user_id: Optional[str] = None
 
 class TaskCreate(TaskBase):
     pass
