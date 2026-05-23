@@ -3,7 +3,7 @@ import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EVO TODO | Cinematic Productivity",
+  title: "EVO TODO",
   description: "A futuristic task management experience.",
 };
 

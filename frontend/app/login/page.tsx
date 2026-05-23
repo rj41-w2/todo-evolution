@@ -17,7 +17,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
-    
+
     setLoading(true);
     setError('');
 
@@ -46,7 +46,7 @@ export default function LoginPage() {
       {/* Cinematic Background Layer */}
       <div className="cinematic-bg" />
       <div className="fixed inset-0 -z-5 particles" />
-      
+
       {/* Floating Ambient Glows */}
       <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-500/10 dark:bg-indigo-500/10 blur-[130px] rounded-full animate-float" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-blue-500/10 blur-[120px] rounded-full animate-float" style={{ animationDelay: '-5s' }} />
@@ -59,14 +59,14 @@ export default function LoginPage() {
       >
         {/* Header */}
         <div className="text-center space-y-3">
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.8 }}
             animate={{ scale: 1 }}
             className="mx-auto h-12 w-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/30 ring-1 ring-white/20 mb-4"
           >
             <Sparkles className="h-6 w-6 text-white" fill="currentColor" />
           </motion.div>
-          
+
           <h2 className="text-3xl font-black italic tracking-tighter text-foreground uppercase">
             EVO<span className="text-indigo-500">TODO</span>
           </h2>
@@ -99,7 +99,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@domain.com"
+                  placeholder="rehan@gmail.com"
                   className="w-full bg-black/20 dark:bg-white/5 border border-white/5 focus:border-indigo-500/50 rounded-xl pl-12 pr-4 py-3.5 text-sm text-foreground placeholder:text-foreground/20 focus:ring-1 focus:ring-indigo-500/20 outline-none transition-all"
                   required
                 />
@@ -144,12 +144,12 @@ export default function LoginPage() {
         {/* Footer Link */}
         <div className="text-center pt-4 border-t border-white/5">
           <p className="text-xs text-foreground/30 font-medium">
-            New to the grid?{' '}
-            <Link 
-              href="/register" 
+            New User?{' '}
+            <Link
+              href="/register"
               className="text-indigo-400 hover:text-indigo-300 font-bold transition-colors ml-1"
             >
-              Initialize Identity
+              Sign Up
             </Link>
           </p>
         </div>

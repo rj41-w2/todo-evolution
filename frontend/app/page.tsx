@@ -52,8 +52,8 @@ export default function Home() {
   const createTask = async (taskData: TaskCreate) => {
     if (!user?.id) return;
 
-    const tempId = typeof window !== 'undefined' && window.crypto?.randomUUID 
-      ? window.crypto.randomUUID() 
+    const tempId = typeof window !== 'undefined' && window.crypto?.randomUUID
+      ? window.crypto.randomUUID()
       : `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     const tempTask: Task = {
@@ -169,14 +169,14 @@ export default function Home() {
       {/* Cinematic Background Layer */}
       <div className="cinematic-bg" />
       <div className="fixed inset-0 -z-5 particles" />
-      
+
       {/* Floating Ambient Glows */}
       <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 dark:bg-indigo-500/10 blur-[120px] rounded-full animate-float" />
       <div className="fixed bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-blue-500/10 dark:bg-blue-500/10 blur-[100px] rounded-full animate-float" style={{ animationDelay: '-5s' }} />
 
       <nav className="sticky top-0 z-50 glass border-x-0 border-t-0 border-b-black/5 dark:border-b-white/5 px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-3"
@@ -188,7 +188,7 @@ export default function Home() {
               EVO<span className="text-indigo-500">TODO</span>
             </span>
           </motion.div>
-          
+
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -265,7 +265,7 @@ export default function Home() {
       {/* Footer Decoration */}
       <footer className="py-12 text-center opacity-20 pointer-events-none">
         <div className="h-px bg-gradient-to-r from-transparent via-foreground/20 to-transparent w-full max-w-xs mx-auto mb-4" />
-        <p className="text-[10px] font-bold tracking-[0.2em] uppercase">Phase III Deployment • AI-Powered Chatbot</p>
+        <p className="text-[10px] font-bold tracking-[0.2em] uppercase">EvoTodo • Beyond Task Management. Powered by Agentic Intelligence.</p>
       </footer>
 
       {/* Floating Conversational AI Chatbot Assistant */}

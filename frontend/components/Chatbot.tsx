@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  MessageSquare, Send, X, Sparkles, Check, Trash2, 
-  Plus, Edit, List, AlertCircle, Loader2 
+import {
+  MessageSquare, Send, X, Sparkles, Check, Trash2,
+  Plus, Edit, List, AlertCircle, Loader2
 } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
@@ -30,7 +30,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
       if (session?.data?.user) {
         const currentUser = session.data.user;
         setUser(currentUser);
-        
+
         // Load persisted conversation details from localStorage
         const storedConvId = localStorage.getItem(`evo_conv_id_${currentUser.id}`);
         const storedMessages = localStorage.getItem(`evo_chat_history_${currentUser.id}`);
@@ -93,7 +93,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
 
       if (res.ok) {
         const data: ChatResponse = await res.json();
-        
+
         // Set new conversation ID if it was created
         if (data.conversation_id) {
           setConversationId(data.conversation_id);
@@ -183,7 +183,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
             className="h-14 w-14 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30 border border-white/20 cursor-pointer relative active:scale-95 transition-shadow hover:shadow-indigo-500/50"
           >
             <MessageSquare className="h-6 w-6" />
-            <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse" />
+
           </motion.button>
         )}
       </AnimatePresence>
@@ -211,13 +211,13 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                   <h3 className="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
                     EVO <span className="text-indigo-400 font-bold uppercase text-[9px] bg-indigo-500/10 px-1.5 py-0.5 rounded-md border border-indigo-500/15">AI Chat</span>
                   </h3>
-                  <p className="text-[10px] text-emerald-400 font-bold tracking-wide">ONLINE • GEMINI AGENT</p>
+                  <p className="text-[10px] text-emerald-400 font-bold tracking-wide">ONLINE</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 {messages.length > 0 && (
-                  <button 
+                  <button
                     onClick={clearChat}
                     className="text-[10px] font-bold text-rose-500 hover:text-rose-400 uppercase bg-rose-500/10 border border-rose-500/10 hover:border-rose-500/25 px-2 py-1 rounded-lg transition-all cursor-pointer"
                   >
@@ -245,13 +245,13 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                     Create, list, mark complete, or delete your tasks using simple natural language.
                   </p>
                   <div className="flex flex-flow flex-col gap-2 w-full pt-2">
-                    <button 
+                    <button
                       onClick={() => setInputValue('Show my pending tasks')}
                       className="text-left text-xs bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 px-3.5 py-2 rounded-xl text-indigo-300 transition-all font-medium cursor-pointer"
                     >
                       "Show my pending tasks"
                     </button>
-                    <button 
+                    <button
                       onClick={() => setInputValue('Add a high priority task study chemistry tonight')}
                       className="text-left text-xs bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 px-3.5 py-2 rounded-xl text-indigo-300 transition-all font-medium cursor-pointer"
                     >
@@ -266,11 +266,10 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                     className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs font-medium leading-relaxed leading-normal ${
-                        msg.role === 'user'
-                          ? 'bg-indigo-600 text-white rounded-br-none shadow-md shadow-indigo-600/10 border border-indigo-500/20'
-                          : 'bg-white/5 text-slate-200 border border-white/5 rounded-bl-none'
-                      }`}
+                      className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs font-medium leading-relaxed leading-normal ${msg.role === 'user'
+                        ? 'bg-indigo-600 text-white rounded-br-none shadow-md shadow-indigo-600/10 border border-indigo-500/20'
+                        : 'bg-white/5 text-slate-200 border border-white/5 rounded-bl-none'
+                        }`}
                     >
                       {msg.content}
                     </div>
@@ -279,7 +278,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                     {msg.role === 'assistant' && toolLogs[msg.id] && (
                       <div className="flex flex-wrap gap-1.5 mt-2 ml-1">
                         {toolLogs[msg.id].map((toolCall, idx) => (
-                          <div 
+                          <div
                             key={idx}
                             className="flex items-center gap-1.5 text-[9px] font-bold bg-white/5 text-white/50 border border-white/5 px-2 py-0.5 rounded-md shadow-sm shrink-0"
                           >
