@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Circle, Trash2, Tag, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Tag, AlertTriangle, Calendar } from 'lucide-react';
 import { Task, Status } from '../types';
 import { API_BASE_URL } from '../lib/config';
 
@@ -64,6 +64,16 @@ export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskLi
                     {tag}
                   </div>
                 ))}
+                {task.due_date && (
+                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium ${
+                    new Date(task.due_date) < new Date() && task.status !== 'Completed'
+                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' 
+                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                  }`}>
+                    <Calendar className="h-2.5 w-2.5" />
+                    Due: {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                )}
               </div>
             </div>
 
