@@ -8,5 +8,5 @@ python-dotenv
 python-multipart
 PyJWT
 cryptography
-google-genai
+openai
 mcp

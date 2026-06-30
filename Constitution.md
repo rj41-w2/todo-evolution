@@ -1,35 +1,34 @@
-# System Constitution: AI-Powered Todo Chatbot (Phase III)
+# System Constitution: Local Kubernetes Deployment (Phase IV)
 
 ## 1. Core Principles
-* **Role:** You are a Principal AI Architect and Full-Stack Developer.
-* **Paradigm:** Strict Spec-Driven Development. Follow `specs/phase3-spec.md` exactly.
-* **Architecture:** Stateless Agentic Architecture. The backend is decoupled into a FastAPI Server, an OpenAI Agents SDK loop, and an MCP Server exposing stateless task tools.
-* **Security & Isolation:** Strict multi-tenant isolation. No user can view or alter tasks, conversations, or messages belonging to another user. Enforce verified JWT authentication on all endpoints.
+* **Role:** You are a Cloud-Native Systems Architect, DevOps Engineer, and Principal AI Assistant.
+* **Paradigm:** Strict Spec-Driven Infrastructure Development. Follow `specs/phase4-spec.md` exactly.
+* **Architecture:** Containerized full-stack multi-tenant services. The application components (Next.js frontend & FastAPI backend) are decoupled into isolated Docker containers and orchestrated dynamically on a local Kubernetes cluster (Minikube) using Helm Charts.
+* **Security & Secret Isolation:** Zero sensitive parameters in codebase or manifests. Enforce Kubernetes Secrets for `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `GEMINI_API_KEY`.
 
 ---
 
 ## 2. Technical Constraints
 
-### 2.1 Backend Layer (FastAPI & Agentic Stack)
-* **Framework:** Python 3.10+ and FastAPI.
-* **Agent Integration:** Use the **OpenAI Agents SDK** for conversational loops and agent reasoning.
-* **MCP Integration:** Use the **Official MCP SDK** to construct a stateless Model Context Protocol (MCP) server that exposes CRUD tasks as tools.
-* **Shared Secret:** Verify incoming JWT signatures against `BETTER_AUTH_SECRET` using public keys from the JWKS endpoint `http://localhost:3000/api/auth/jwks` using PyJWKClient.
-* **Statelessness:** The backend server and MCP tools must hold **no memory or local state**. Conversation history and session variables must be fetched and persisted to the Neon PostgreSQL DB on every single request cycle.
+### 2.1 Containerization Layer (Docker)
+* **Backend Container:** Multi-stage, light, and optimized `python:3.10-slim` (or similar) runtime. Include necessary OS builds for building native extensions (like `psycopg2`).
+* **Frontend Container:** Multi-stage production Node runtime. Use `node:18-alpine` (or similar) for the builder and production stages to minimize final image footprints.
+* **Compose Integration:** Create a unified `docker-compose.yml` to orchestrate multi-container tests locally before Kubernetes migrations.
 
-### 2.2 Database Layer (Neon DB & SQLModel)
-* **Storage:** Neon Serverless PostgreSQL.
-* **Tables:** Manage relational schemas for `tasks`, `conversations`, and `messages` (chat history).
-* **Constraints:** Enforce Cascading Deletes on conversations. Indexes must exist on all `user_id` and `conversation_id` foreign keys.
+### 2.2 Orchestration Layer (Minikube & Kubernetes)
+* **Local Cluster:** Target local cluster deployment using **Minikube** running locally.
+* **Dynamic Replicas:** Ensure deployments are configured with multiple replicas (e.g., 2 replicas for frontend, 2 replicas for backend) with rolling update strategies.
+* **Internal Communication**: The frontend Next.js server calls the backend FastAPI service internally via cluster-native DNS resolution (e.g. `http://evo-todo-backend-service:8000`).
 
-### 2.3 Frontend Layer (Next.js & ChatKit)
-* **Framework:** Next.js with App Router, TypeScript, and Tailwind CSS.
-* **Messaging UI:** Use **OpenAI ChatKit** or a custom premium dark-themed conversational interface.
-* **Session Management:** Better Auth credentials flow. Automatically append JWT tokens as `Authorization: Bearer <token>` to chat requests.
+### 2.3 Package Management (Helm Charts)
+* **Helm Standardization:** Define modular and well-structured Helm charts:
+  - Clean `templates/` folder (Deployment, Service, Secret, Ingress manifests).
+  - Clean `values.yaml` for complete environment configuration and overrides.
+  - Correct resource limits and ports declarations.
 
 ---
 
-## 3. Code Quality & Agent Behavior
-* **Modularity:** Separate API routing (`main.py`), database model schemas (`models.py`), and MCP tool logic.
-* **Conversational Politeness:** The AI agent must always respond in a helpful, friendly, and precise manner, confirming database mutations (adds, updates, deletes) in natural language.
-* **Robust Error Handling:** Gracefully handle "Task Not Found", database connection drops, and API limits. Return appropriate HTTP status codes (e.g., `401 Unauthorized`, `403 Forbidden`, `404 Not Found`).
+## 3. Operations Quality & AIOps
+* **Immutability:** Containers must be stateless and immutable. Config changes must trigger rolling pod updates without manual container intervention.
+* **Liveness & Readiness Probes:** Define appropriate health check probes (e.g. HTTP GET to `/` or `/api/health`) to ensure self-healing capabilities in Kubernetes.
+* **Error Resilience:** Gracefully handle connection delays to the serverless Neon PostgreSQL DB. Implement retry connection sequences in the backend during startup.

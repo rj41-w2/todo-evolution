@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, Header, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,9 +8,10 @@ from sqlalchemy.orm import Session
 import jwt
 from jwt import PyJWKClient
 
-from google import genai
-from google.genai import types
-import tools
+import json
+import openai
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 from database import engine, get_db, Base
 from models import (
@@ -197,54 +199,44 @@ def delete_task(
     return None
 
 @app.post("/api/{user_id}/chat", response_model=ChatResponse)
-def chat_with_agent(
+async def chat_with_agent(
     user_id: str,
     chat_req: ChatRequest,
     db: Session = Depends(get_db),
     authenticated_user_id: str = Depends(get_current_user)
 ):
-    # Enforce multi-tenant access: user cannot chat as another user ID
     if authenticated_user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
 
-    # Lazy check for GEMINI_API_KEY
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="GEMINI_API_KEY is not configured on the backend server. Please add it to your .env file."
+            detail="GEMINI_API_KEY is not configured on the backend server."
         )
 
-    # 1. Retrieve or create the conversation session
     if chat_req.conversation_id:
         conversation = db.query(Conversation).filter(
             Conversation.id == chat_req.conversation_id,
             Conversation.user_id == user_id
         ).first()
         if not conversation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation session not found"
-            )
+            raise HTTPException(status_code=404, detail="Conversation session not found")
     else:
         conversation = Conversation(user_id=user_id)
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
 
-    # 2. Get past messages in this conversation session ordered chronologically
-    # We limit history to the last 10 messages (5 turns) to ensure rapid response times
     messages = db.query(Message).filter(
         Message.conversation_id == conversation.id,
         Message.user_id == user_id
     ).order_by(Message.created_at.desc()).limit(10).all()
-    # Reverse to restore proper chronological timeline order
     messages.reverse()
 
-    # 3. Save the new user message to the database
     user_msg_record = Message(
         user_id=user_id,
         conversation_id=conversation.id,
@@ -255,159 +247,128 @@ def chat_with_agent(
     db.commit()
     db.refresh(user_msg_record)
 
-    # 4. Construct Gemini conversation history structure
-    gemini_history = []
-    for msg in messages:
-        # Translate role to Gemini's expected role: "user" or "model"
-        role = "user" if msg.role == "user" else "model"
-        gemini_history.append(
-            types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=msg.content)]
-            )
-        )
-
-    # 5. Define dynamic local tools bound to current verified user_id (for zero-leak multi-tenancy)
-    executed_tools = []
-
-    def add_task_tool(title: str, description: str = None, priority: str = None, tags: list[str] = None) -> dict:
-        """Create a new todo task.
-        
-        Args:
-            title: The title of the task.
-            description: An optional description.
-            priority: Optional priority ("Low", "Medium", "High").
-            tags: Optional list of tags.
-        """
-        res = tools.add_task(user_id=user_id, title=title, description=description, priority=priority, tags=tags)
-        executed_tools.append({
-            "tool": "add_task",
-            "parameters": {"title": title, "description": description, "priority": priority, "tags": tags},
-            "result": res
-        })
-        return res
-
-    def list_tasks_tool(status: str = None, priority: str = None) -> list[dict]:
-        """Fetch tasks with optional status and priority filters.
-        
-        Args:
-            status: Optional status ("all", "pending", "completed").
-            priority: Optional priority ("Low", "Medium", "High").
-        """
-        res = tools.list_tasks(user_id=user_id, status=status, priority=priority)
-        executed_tools.append({
-            "tool": "list_tasks",
-            "parameters": {"status": status, "priority": priority},
-            "result": res
-        })
-        return res
-
-    def complete_task_tool(task_id: str) -> dict:
-        """Mark a task as completed.
-        
-        Args:
-            task_id: The UUID string of the task to complete, OR the task title name.
-        """
-        res = tools.complete_task(user_id=user_id, task_id=task_id)
-        executed_tools.append({
-            "tool": "complete_task",
-            "parameters": {"task_id": task_id},
-            "result": res
-        })
-        return res
-
-    def delete_task_tool(task_id: str) -> dict:
-        """Delete an existing task.
-        
-        Args:
-            task_id: The UUID string of the task to delete, OR the task title name.
-        """
-        res = tools.delete_task(user_id=user_id, task_id=task_id)
-        executed_tools.append({
-            "tool": "delete_task",
-            "parameters": {"task_id": task_id},
-            "result": res
-        })
-        return res
-
-    def update_task_tool(task_id: str, title: str = None, description: str = None, priority: str = None) -> dict:
-        """Update an existing task's title, description, or priority.
-        
-        Args:
-            task_id: The UUID string of the task to update, OR the task title name.
-            title: Optional new title.
-            description: Optional new description.
-            priority: Optional new priority ("Low", "Medium", "High").
-        """
-        res = tools.update_task(user_id=user_id, task_id=task_id, title=title, description=description, priority=priority)
-        executed_tools.append({
-            "tool": "update_task",
-            "parameters": {"task_id": task_id, "title": title, "description": description, "priority": priority},
-            "result": res
-
-        })
-        return res
-
-    # 6. Initialize Gemini client and trigger automatic function calling loop
-    try:
-        client = genai.Client(api_key=api_key)
-        
-        system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
+    system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
 Your job is to help the user manage their tasks (add, update, delete, complete, and list tasks) using your available tools.
 
-Guidelines:
-1. When user requests an action (e.g., adding, completing, updating, deleting, listing tasks), invoke the appropriate tool.
-2. Always summarize what was done in a natural, friendly, and professional tone.
-3. If the user addresses you in Urdu (Latin script or Arabic script), respond in a friendly hybrid Urdu/English (Hinglish/Urdu-English).
-4. Do not mention tool details or internal task IDs unless asked, but confirm the changes clearly (e.g. "I've marked the task 'Buy Groceries' as completed!").
-5. STRICT LATENCY CONSTRAINT: Keep your confirmation responses extremely short, concise, and direct (maximum 1 to 2 sentences). Avoid verbose conversational filler or greetings to maximize reply speed.
-"""
+The current local date and time is: {datetime.now().isoformat()}
+Use this to accurately parse and set any relative dates (like 'tomorrow', 'next week') into standard ISO-8601 strings when calling tools.
 
-        # Create the chat session
-        chat = client.chats.create(
-            model="gemini-2.5-flash",
-            history=gemini_history,
-            config=types.GenerateContentConfig(
-                tools=[
-                    add_task_tool,
-                    list_tasks_tool,
-                    complete_task_tool,
-                    delete_task_tool,
-                    update_task_tool
-                ],
-                system_instruction=system_instruction,
-                temperature=0.7
-            )
+Guidelines:
+1. When user requests an action, invoke the appropriate tool.
+2. Always summarize what was done in a natural, friendly, and professional tone.
+3. If the user addresses you in Urdu, respond in a friendly hybrid Urdu/English (Hinglish/Urdu-English).
+4. Do not mention tool details or internal task IDs unless asked, but confirm the changes clearly.
+5. STRICT LATENCY CONSTRAINT: Keep your confirmation responses extremely short, concise, and direct.
+"""
+    
+    openai_history = [{"role": "system", "content": system_instruction}]
+    for msg in messages:
+        # map 'model' role to 'assistant' for openai SDK
+        role = "assistant" if msg.role == "model" or msg.role == "assistant" else "user"
+        openai_history.append({"role": role, "content": msg.content})
+    openai_history.append({"role": "user", "content": chat_req.message})
+
+    client = openai.AsyncOpenAI(
+        api_key=api_key,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+    )
+
+    executed_tools = []
+    response_text = "I have processed your request."
+
+    try:
+        server_params = StdioServerParameters(
+            command="python",
+            args=[os.path.join(os.path.dirname(__file__), "mcp_server.py")],
+            env=os.environ.copy()
         )
-        
-        # Send user message and get final response
-        response = chat.send_message(chat_req.message)
-        response_text = response.text or "I have processed your request."
-        
+
+        async with stdio_client(server_params) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                
+                mcp_tools_res = await session.list_tools()
+                
+                openai_tools = []
+                for tool in mcp_tools_res.tools:
+                    openai_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool.name,
+                            "description": tool.description or "",
+                            "parameters": tool.inputSchema
+                        }
+                    })
+
+                # Remove user_id from parameters since the agent doesn't provide it
+                for t in openai_tools:
+                    if "user_id" in t["function"]["parameters"].get("properties", {}):
+                        del t["function"]["parameters"]["properties"]["user_id"]
+                    if "user_id" in t["function"]["parameters"].get("required", []):
+                        t["function"]["parameters"]["required"].remove("user_id")
+
+                response = await client.chat.completions.create(
+                    model="gemini-2.5-flash",
+                    messages=openai_history,
+                    tools=openai_tools,
+                    temperature=0.7
+                )
+                
+                response_message = response.choices[0].message
+                
+                if response_message.tool_calls:
+                    openai_history.append(response_message)
+                    
+                    for tool_call in response_message.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        
+                        # Inject user_id securely before passing to MCP
+                        tool_args["user_id"] = user_id
+                        
+                        result = await session.call_tool(tool_name, arguments=tool_args)
+                        tool_result_str = result.content[0].text if result.content else "{}"
+                        
+                        executed_tools.append({
+                            "tool": tool_name,
+                            "parameters": tool_args,
+                            "result": json.loads(tool_result_str)
+                        })
+                        
+                        openai_history.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": tool_name,
+                            "content": tool_result_str
+                        })
+                        
+                    second_response = await client.chat.completions.create(
+                        model="gemini-2.5-flash",
+                        messages=openai_history,
+                        tools=openai_tools,
+                        temperature=0.7
+                    )
+                    response_text = second_response.choices[0].message.content
+                else:
+                    response_text = response_message.content
+
     except Exception as e:
-        print(f"[DEBUG GEMINI ERROR] Error during Gemini generation: {str(e)}")
-        # Delete user message from history on failure to keep conversational consistency
+        print(f"[DEBUG GEMINI ERROR] Error during generation: {str(e)}")
         db.delete(user_msg_record)
         db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"AI Chatbot service error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"AI Chatbot service error: {str(e)}")
 
-    # 7. Persist the assistant's final response turn to the database
     assistant_msg_record = Message(
         user_id=user_id,
         conversation_id=conversation.id,
         role="assistant",
-        content=response_text
+        content=response_text or ""
     )
     db.add(assistant_msg_record)
     db.commit()
 
-    # 8. Return response model
     return ChatResponse(
         conversation_id=conversation.id,
-        response=response_text,
+        response=response_text or "",
         tool_calls=executed_tools
     )
-
