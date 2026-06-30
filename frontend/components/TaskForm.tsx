@@ -15,6 +15,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('Medium');
   const [tags, setTags] = useState('');
+  const [dueDate, setDueDate] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,13 +26,15 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
       description: description.trim() || undefined,
       priority,
       tags: tags.split(',').map(t => t.trim()).filter(t => t !== ''),
-      status: 'Pending'
+      status: 'Pending',
+      due_date: dueDate ? new Date(dueDate).toISOString() : undefined
     };
 
     // Instant feedback: clear the fields immediately!
     setTitle('');
     setDescription('');
     setTags('');
+    setDueDate('');
 
     try {
       await onTaskCreated(newTask);
@@ -89,6 +92,16 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               className="bg-transparent border-none focus:ring-0 text-sm p-0 w-32 placeholder:text-foreground/20"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 text-foreground/40 hover:text-foreground/70 transition-colors">
+            <Calendar className="h-4 w-4" />
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="bg-transparent border-none focus:ring-0 text-sm p-0 cursor-pointer text-foreground/70"
             />
           </div>
 
