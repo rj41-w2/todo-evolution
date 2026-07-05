@@ -11,3 +11,12 @@ node_modules
 .venv
 database.db
 database.sqlite
+
+# Scratch files
+patch.json
+frontend/check-users.js
+frontend/test-auth.js
+frontend/test-db.js
+
+# Helm charts and secrets
+helm/

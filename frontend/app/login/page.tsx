@@ -34,7 +34,7 @@ export default function LoginPage() {
         router.refresh();
       }
     } catch (err: any) {
-      setError('An unexpected error occurred. Please try again.');
+      setError(err?.message || err?.toString() || 'An unexpected error occurred. Please try again.');
       console.error(err);
     } finally {
       setLoading(false);
