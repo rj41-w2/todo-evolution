@@ -4,19 +4,18 @@ EVO-TODO is a multi-phase software engineering project designed to demonstrate t
 
 ## 🚀 The Roadmap (5 Phases)
 
-This project is structured into five distinct architectural phases. Currently, we have completed Phase I and are mid-way through Phase II.
+This project is structured into five distinct architectural phases. Currently, we have completed Phase IV and Phase V is planned.
 
 - [x] **Phase I: The In-Memory CLI**
   - Robust Python CLI with in-memory state.
   - Features: Priority levels, tags, recurrence, and overdue tracking.
-- [~] **Phase II: Decoupled Full-Stack Architecture** (Current)
+- [x] **Phase II: Decoupled Full-Stack Architecture**
   - Transition to a modern Web UI and REST API.
-  - **Status:** Backend CRUD & Database integrated; Frontend core UI complete.
-  - **Next Steps:** Implement advanced filtering, sorting, and due-date management in the Web UI.
-- [ ] **Phase III: User Authentication & Multi-Tenancy** (Planned)
-  - Secure login/signup and personalized task lists.
-- [ ] **Phase IV: Advanced Analytics & Productivity Insights** (Planned)
-  - Visualization of task completion trends and productivity scoring.
+  - Backend CRUD & Database integrated; Frontend core UI complete.
+- [x] **Phase III: AI Chatbot & MCP Integration**
+  - AI Assistant integration using OpenAI SDK and MCP.
+- [x] **Phase IV: Containerization & Orchestration**
+  - Dockerfiles and Helm charts for Kubernetes deployment.
 - [ ] **Phase V: Global Scale & Mobile Integration** (Planned)
   - Cloud-native deployment and cross-platform mobile support.
 
@@ -74,14 +73,13 @@ This project is structured into five distinct architectural phases. Currently, w
 
 ---
 
-## 📈 Current Progress (Phase II - 50%)
+## 📈 Current Progress (Phase IV Completed)
 - [x] FastAPI REST Endpoints (CRUD)
 - [x] Neon DB PostgreSQL Integration
 - [x] Modern Cinematic UI with Next.js
-- [x] Real-time Task Creation & Status Toggling
-- [ ] Advanced Filtering & Sorting (Frontend)
-- [ ] Due Date Picker & Reminders (Frontend)
-- [ ] Toast Notifications & Error Boundaries
+- [x] AI Chatbot Integration via MCP & OpenAI SDK
+- [x] Containerization with Docker & Helm for Kubernetes
+- [ ] Phase 5: Mobile App & Global Scale (Next Step)
 
 ---
 
