@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Tag, Calendar, AlertCircle } from 'lucide-react';
+import { Plus, Tag, Calendar } from 'lucide-react';
 import { Priority, TaskCreate } from '../types';
-import { API_BASE_URL } from '../lib/config';
 
 interface TaskFormProps {
   onTaskCreated: (task: TaskCreate) => Promise<void>;
@@ -44,77 +42,74 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="glass p-8 rounded-2xl w-full max-w-2xl mx-auto mb-12"
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="space-y-2">
-          <input
-            type="text"
-            placeholder="What needs to be done?"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full bg-transparent text-2xl font-bold placeholder:text-foreground/20 border-none focus:ring-0 p-0"
-            required
-          />
-          <div className="h-px bg-gradient-to-r from-indigo-500/50 to-transparent w-full" />
-        </div>
+    <section aria-label="Add a task">
+      <form onSubmit={handleSubmit} className="bg-paper-2 border border-rule rounded-[var(--radius-card)] p-4 sm:p-5 space-y-4">
+        <input
+          type="text"
+          placeholder="What needs to be done?"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          aria-label="Task title"
+          className="w-full bg-transparent text-lg font-medium placeholder:text-muted focus:outline-none text-ink"
+          required
+        />
 
         <textarea
-          placeholder="Add a description..."
+          placeholder="Add a description…"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="w-full bg-transparent text-foreground/60 placeholder:text-foreground/20 border-none focus:ring-0 p-0 resize-none"
+          aria-label="Task description"
+          className="w-full bg-transparent text-sm text-ink-2 placeholder:text-muted focus:outline-none resize-none"
           rows={2}
         />
 
-        <div className="flex flex-wrap items-center gap-6 pt-4">
-          <div className="flex items-center gap-2 text-foreground/40 hover:text-foreground/70 transition-colors">
-            <AlertCircle className="h-4 w-4" />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-2 border-t border-rule">
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
+            <span className="font-mono text-xs">PRIORITY</span>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
-              className="bg-transparent border-none focus:ring-0 text-sm p-0 cursor-pointer"
+              className="select-input bg-transparent border-none p-0 text-sm text-ink cursor-pointer focus:outline-none"
             >
-              <option value="Low" className="bg-background text-foreground">Low Priority</option>
-              <option value="Medium" className="bg-background text-foreground">Medium Priority</option>
-              <option value="High" className="bg-background text-foreground">High Priority</option>
+              <option value="Low" className="bg-paper text-ink">Low</option>
+              <option value="Medium" className="bg-paper text-ink">Medium</option>
+              <option value="High" className="bg-paper text-ink">High</option>
             </select>
-          </div>
+          </label>
 
-          <div className="flex items-center gap-2 text-foreground/40 group">
-            <Tag className="h-4 w-4 group-focus-within:text-indigo-500 transition-colors" />
+          <label className="flex items-center gap-2 text-sm text-muted group">
+            <Tag className="h-4 w-4" />
             <input
               type="text"
-              placeholder="Add tags..."
+              placeholder="Tags"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              className="bg-transparent border-none focus:ring-0 text-sm p-0 w-32 placeholder:text-foreground/20"
+              aria-label="Tags, comma separated"
+              className="bg-transparent border-none p-0 text-sm w-28 placeholder:text-muted focus:outline-none"
             />
-          </div>
+          </label>
 
-          <div className="flex items-center gap-2 text-foreground/40 hover:text-foreground/70 transition-colors">
+          <label className="flex items-center gap-2 text-sm text-muted">
             <Calendar className="h-4 w-4" />
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="bg-transparent border-none focus:ring-0 text-sm p-0 cursor-pointer text-foreground/70"
+              aria-label="Due date"
+              className="bg-transparent border-none p-0 text-sm text-ink cursor-pointer focus:outline-none"
             />
-          </div>
+          </label>
 
           <button
             type="submit"
             disabled={!title}
-            className="ml-auto glow-primary bg-indigo-600 hover:bg-indigo-500 disabled:bg-foreground/10 disabled:text-foreground/30 disabled:shadow-none text-white px-6 py-2 rounded-full font-semibold flex items-center gap-2 transition-all active:scale-95"
+            className="btn-primary ml-auto"
           >
             <Plus className="h-4 w-4" />
-            Add Task
+            Add task
           </button>
         </div>
       </form>
-    </motion.div>
+    </section>
   );
 }

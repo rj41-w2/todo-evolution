@@ -8,7 +8,7 @@ import TaskList from '../components/TaskList';
 import TaskControls from '../components/TaskControls';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Task, TaskCreate, Status, Priority } from '../types';
-import { Sparkles, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
 import Chatbot from '../components/Chatbot';
@@ -175,8 +175,8 @@ export default function Home() {
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(t => 
-        t.title.toLowerCase().includes(q) || 
+      result = result.filter(t =>
+        t.title.toLowerCase().includes(q) ||
         (t.description && t.description.toLowerCase().includes(q)) ||
         t.tags.some(tag => tag.toLowerCase().includes(q))
       );
@@ -209,44 +209,27 @@ export default function Home() {
     return result;
   }, [tasks, searchQuery, statusFilter, priorityFilter, sortBy]);
 
+  const openCount = filteredAndSortedTasks.filter(t => t.status !== 'Completed').length;
+  const doneCount = filteredAndSortedTasks.length - openCount;
+  const firstName = user?.name?.split(' ')[0] || 'there';
+
   return (
-    <div className="min-h-screen relative font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Cinematic Background Layer */}
-      <div className="cinematic-bg" />
-      <div className="fixed inset-0 -z-5 particles" />
+    <div className="min-h-dvh font-body">
+      <header className="top-rail">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <a href="/" className="wordmark">
+            EVO<span className="text-accent">TODO</span>
+          </a>
 
-      {/* Floating Ambient Glows */}
-      <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 dark:bg-indigo-500/10 blur-[120px] rounded-full animate-float" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-blue-500/10 dark:bg-blue-500/10 blur-[100px] rounded-full animate-float" style={{ animationDelay: '-5s' }} />
-
-      <nav className="sticky top-0 z-50 glass border-x-0 border-t-0 border-b-black/5 dark:border-b-white/5 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-3"
-          >
-            <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/30 ring-1 ring-white/20">
-              <Sparkles className="h-5 w-5 text-white" fill="currentColor" />
-            </div>
-            <span className="text-2xl font-black italic tracking-tighter text-foreground">
-              EVO<span className="text-indigo-500">TODO</span>
-            </span>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-4 md:gap-6"
-          >
+          <div className="flex items-center gap-2">
             {user && (
-              <div className="flex items-center gap-3 pr-4 border-r border-black/5 dark:border-white/5">
-                <div className="h-8 w-8 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl flex items-center justify-center font-bold text-xs uppercase shadow-sm shrink-0">
+              <div className="hidden sm:flex items-center gap-2 pr-3 mr-1 border-r border-rule">
+                <div className="w-8 h-8 rounded-[var(--radius-input)] bg-accent-soft text-accent flex items-center justify-center font-semibold text-xs uppercase shrink-0">
                   {user.name?.charAt(0) || 'U'}
                 </div>
-                <div className="hidden sm:block text-left max-w-[120px]">
-                  <p className="text-xs font-bold text-foreground leading-none truncate">{user.name}</p>
-                  <p className="text-[9px] text-foreground/40 leading-none mt-1 truncate">{user.email}</p>
+                <div className="text-left leading-tight">
+                  <p className="text-xs font-medium text-ink">{user.name}</p>
+                  <p className="text-[10px] text-muted truncate max-w-[140px]">{user.email}</p>
                 </div>
               </div>
             )}
@@ -256,75 +239,66 @@ export default function Home() {
             {user && (
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-rose-500 hover:text-rose-400 bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/15 hover:border-rose-500/30 px-3.5 py-2 rounded-xl transition-all cursor-pointer active:scale-95 shadow-sm"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[var(--radius-input)] text-xs font-medium text-danger hover:bg-danger-soft transition-colors cursor-pointer"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Log Out</span>
+                <span className="hidden md:inline">Log out</span>
               </button>
             )}
-          </motion.div>
+          </div>
         </div>
-      </nav>
+      </header>
 
-      <main className="relative z-10 py-12 px-4 space-y-20">
-        {/* Hero Section with Form */}
-        <section className="text-center space-y-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="space-y-4"
-          >
-            <h2 className="text-5xl md:text-7xl font-black tracking-tight leading-none italic uppercase">
-              Master Your <br />
-              <span className="text-indigo-500">Universe.</span>
-            </h2>
-            <p className="text-foreground/40 text-lg md:text-xl font-medium max-w-lg mx-auto">
-              Precision task management for the digital frontier.
-            </p>
-          </motion.div>
-
-          <TaskForm onTaskCreated={createTask} />
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-12 space-y-8">
+        {/* Page header — functional, not a hero */}
+        <section className="space-y-1.5">
+          <h1 className="page-header text-[var(--text-2xl)]">
+            Good to see you, {firstName}.
+          </h1>
+          <p className="font-mono text-sm text-muted">
+            {loading ? '…' : `${openCount} open · ${doneCount} done`}
+          </p>
         </section>
 
-        {/* Task List Section */}
-        <section className="pb-24">
-          <TaskControls 
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            statusFilter={statusFilter}
-            setStatusFilter={setStatusFilter}
-            priorityFilter={priorityFilter}
-            setPriorityFilter={setPriorityFilter}
-            sortBy={sortBy}
-            setSortBy={setSortBy}
-          />
+        <TaskForm onTaskCreated={createTask} />
 
-          <AnimatePresence mode="wait">
-            {loading ? (
-              <motion.div
-                key="loader"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex justify-center items-center py-20"
-              >
-                <div className="h-10 w-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-              </motion.div>
-            ) : (
-              <TaskList tasks={filteredAndSortedTasks} onToggleStatus={toggleTaskStatus} onDeleteTask={deleteTask} />
-            )}
-          </AnimatePresence>
-        </section>
+        <TaskControls
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          priorityFilter={priorityFilter}
+          setPriorityFilter={setPriorityFilter}
+          sortBy={sortBy}
+          setSortBy={setSortBy}
+        />
+
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="loader"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex justify-center items-center py-16"
+            >
+              <div className="h-8 w-8 border-2 border-rule-2 border-t-accent rounded-full animate-spin" />
+            </motion.div>
+          ) : (
+            <TaskList tasks={filteredAndSortedTasks} onToggleStatus={toggleTaskStatus} onDeleteTask={deleteTask} />
+          )}
+        </AnimatePresence>
       </main>
 
-      {/* Footer Decoration */}
-      <footer className="py-12 text-center opacity-20 pointer-events-none">
-        <div className="h-px bg-gradient-to-r from-transparent via-foreground/20 to-transparent w-full max-w-xs mx-auto mb-4" />
-        <p className="text-[10px] font-bold tracking-[0.2em] uppercase">EvoTodo • Beyond Task Management. Powered by Agentic Intelligence.</p>
+      <footer className="py-10">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
+          <div className="h-px bg-rule mb-6" />
+          <p className="text-xs text-muted">
+            EVO TODO — tasks, with an AI assistant that edits them for you.
+          </p>
+        </div>
       </footer>
 
-      {/* Floating Conversational AI Chatbot Assistant */}
       <Chatbot onTaskMutation={fetchTasks} />
     </div>
   );

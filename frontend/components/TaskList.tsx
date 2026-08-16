@@ -2,9 +2,8 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, Circle, Trash2, Tag, AlertTriangle, Calendar } from 'lucide-react';
-import { Task, Status } from '../types';
-import { API_BASE_URL } from '../lib/config';
+import { CheckCircle2, Circle, Trash2, Tag, Calendar } from 'lucide-react';
+import { Task } from '../types';
 
 interface TaskListProps {
   tasks: Task[];
@@ -12,99 +11,146 @@ interface TaskListProps {
   onDeleteTask: (id: string) => Promise<void>;
 }
 
+const priorityDot: Record<string, string> = {
+  High: 'var(--color-danger)',
+  Medium: 'var(--color-warn)',
+  Low: 'var(--color-muted)',
+};
+
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskListProps) {
+  const open = tasks.filter(t => t.status !== 'Completed');
+  const done = tasks.filter(t => t.status === 'Completed');
 
-  const priorityConfig = {
-    High: { color: 'text-rose-500', glow: 'shadow-rose-500/20', icon: <AlertTriangle className="h-3 w-3" /> },
-    Medium: { color: 'text-amber-500', glow: 'shadow-amber-500/20', icon: null },
-    Low: { color: 'text-emerald-500', glow: 'shadow-emerald-500/20', icon: null },
-  };
+  if (tasks.length === 0) {
+    return (
+      <div className="py-16 text-center space-y-1">
+        <p className="font-display text-lg font-semibold text-ink">No tasks yet.</p>
+        <p className="text-sm text-muted">Add your first one with the field above.</p>
+      </div>
+    );
+  }
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto px-4">
-      <AnimatePresence mode="popLayout">
-        {tasks.map((task, index) => (
+  if (open.length === 0 && done.length === 0) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-sm text-muted">No tasks match your filters.</p>
+      </div>
+    );
+  }
+
+  const renderRows = (group: Task[]) => (
+    <AnimatePresence mode="popLayout" initial={false}>
+      {group.map(task => {
+        const isDone = task.status === 'Completed';
+        const overdue = task.due_date && new Date(task.due_date) < new Date() && !isDone;
+
+        return (
           <motion.div
             key={task.id}
             layout
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: -20 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
-            className={`glass group p-6 rounded-2xl flex flex-col justify-between h-full hover:border-indigo-500/30 transition-all ${
-              task.status === 'Completed' ? 'opacity-40 grayscale-[0.5]' : ''
-            }`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: EASE_OUT }}
+            className="ledger-row"
           >
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-foreground/[0.03] dark:bg-white/5 border border-foreground/[0.05] dark:border-white/5 text-[10px] font-bold uppercase tracking-widest ${priorityConfig[task.priority].color}`}>
-                  {priorityConfig[task.priority].icon}
-                  {task.priority}
-                </div>
+            <button
+              onClick={() => onToggleStatus(task)}
+              aria-label={isDone ? 'Mark as open' : 'Mark as complete'}
+              className="icon-btn mt-0.5 shrink-0"
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={isDone ? 'done' : 'open'}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ duration: 0.15, ease: EASE_OUT }}
+                  className="flex"
+                >
+                  {isDone
+                    ? <CheckCircle2 className="h-5 w-5 text-success" />
+                    : <Circle className="h-5 w-5 text-muted" />}
+                </motion.span>
+              </AnimatePresence>
+            </button>
+
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="flex items-start justify-between gap-3">
+                <h3 className={`task-title ${isDone ? 'task-title--done' : ''}`}>
+                  {task.title}
+                </h3>
                 <button
                   onClick={() => onDeleteTask(task.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 text-foreground/20 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+                  aria-label={`Delete ${task.title}`}
+                  className="icon-btn-danger shrink-0"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
 
-              <h3 className={`text-xl font-bold leading-tight mb-2 ${task.status === 'Completed' ? 'line-through text-foreground/40' : 'text-foreground'}`}>
-                {task.title}
-              </h3>
+              {task.description && (
+                <p className="task-desc line-clamp-1">{task.description}</p>
+              )}
 
-              <p className="text-sm text-foreground/50 line-clamp-3 mb-6">
-                {task.description || 'No description provided.'}
-              </p>
+              {(task.tags.length > 0 || task.due_date) && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="chip">
+                    <span
+                      className="h-1.5 w-1.5 rounded-full shrink-0"
+                      style={{ background: priorityDot[task.priority] }}
+                    />
+                    {task.priority}
+                  </span>
 
-              <div className="flex flex-wrap gap-2 mb-6">
-                {task.tags.map((tag) => (
-                  <div key={tag} className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-[10px] text-indigo-400 font-medium">
-                    <Tag className="h-2.5 w-2.5" />
-                    {tag}
-                  </div>
-                ))}
-                {task.due_date && (
-                  <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10px] font-medium ${
-                    new Date(task.due_date) < new Date() && task.status !== 'Completed'
-                      ? 'bg-rose-500/10 border-rose-500/20 text-rose-500' 
-                      : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                  }`}>
-                    <Calendar className="h-2.5 w-2.5" />
-                    Due: {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </div>
-                )}
-              </div>
-            </div>
+                  {task.tags.map(tag => (
+                    <span key={tag} className="chip">
+                      <Tag className="h-3 w-3" />
+                      {tag}
+                    </span>
+                  ))}
 
-            <div className="pt-4 border-t border-black/5 dark:border-white/5 flex items-center justify-between mt-auto">
-              <span className="text-[10px] text-foreground/20 font-medium">
-                {new Date(task.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-              </span>
-              
-              <button
-                onClick={() => onToggleStatus(task)}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
-                  task.status === 'Completed'
-                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                    : 'bg-foreground/[0.03] dark:bg-white/5 text-foreground/40 hover:text-foreground border border-black/5 dark:border-white/10 hover:border-indigo-500/30'
-                }`}
-              >
-                {task.status === 'Completed' ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <Circle className="h-4 w-4" />
-                )}
-                {task.status === 'Completed' ? 'Completed' : 'Complete'}
-              </button>
+                  {task.due_date && (
+                    <span className={`chip ${overdue ? 'text-danger bg-danger-soft border-danger-soft' : ''}`}>
+                      <Calendar className="h-3 w-3" />
+                      Due {formatDate(task.due_date)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
-        ))}
-      </AnimatePresence>
-      {tasks.length === 0 && (
-        <div className="col-span-full py-20 text-center opacity-20">
-          <p className="text-2xl font-black italic tracking-tighter">THE VOID IS EMPTY</p>
-        </div>
+        );
+      })}
+    </AnimatePresence>
+  );
+
+  return (
+    <div className="space-y-8">
+      {open.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2 className="section-head-title">Open</h2>
+            <span className="section-head-count">{open.length}</span>
+          </div>
+          {renderRows(open)}
+        </section>
+      )}
+
+      {done.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2 className="section-head-title">Done</h2>
+            <span className="section-head-count">{done.length}</span>
+          </div>
+          {renderRows(done)}
+        </section>
       )}
     </div>
   );

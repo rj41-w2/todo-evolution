@@ -12,6 +12,8 @@ interface ChatbotProps {
   onTaskMutation: () => void;
 }
 
+const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
 export default function Chatbot({ onTaskMutation }: ChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -147,12 +149,12 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
 
   const getToolIcon = (toolName: string) => {
     switch (toolName) {
-      case 'add_task': return <Plus className="h-3 w-3 text-emerald-400" />;
-      case 'complete_task': return <Check className="h-3 w-3 text-teal-400" />;
-      case 'delete_task': return <Trash2 className="h-3 w-3 text-rose-400" />;
-      case 'update_task': return <Edit className="h-3 w-3 text-amber-400" />;
-      case 'list_tasks': return <List className="h-3 w-3 text-indigo-400" />;
-      default: return <Sparkles className="h-3 w-3 text-indigo-400" />;
+      case 'add_task': return <Plus className="h-3 w-3 text-success" />;
+      case 'complete_task': return <Check className="h-3 w-3 text-success" />;
+      case 'delete_task': return <Trash2 className="h-3 w-3 text-danger" />;
+      case 'update_task': return <Edit className="h-3 w-3 text-warn" />;
+      case 'list_tasks': return <List className="h-3 w-3 text-accent" />;
+      default: return <Sparkles className="h-3 w-3 text-accent" />;
     }
   };
 
@@ -169,7 +171,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100] font-sans">
+    <div className="fixed bottom-6 right-6 z-[var(--z-modal)]">
       <AnimatePresence>
         {/* Floating Chat Bubble Button */}
         {!isOpen && (
@@ -177,13 +179,12 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             onClick={() => setIsOpen(true)}
-            className="h-14 w-14 rounded-full bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/30 border border-white/20 cursor-pointer relative active:scale-95 transition-shadow hover:shadow-indigo-500/50"
+            aria-label="Open AI assistant"
+            className="btn-primary h-14 w-14 rounded-full p-0"
           >
             <MessageSquare className="h-6 w-6" />
-
           </motion.button>
         )}
       </AnimatePresence>
@@ -192,41 +193,37 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
         {/* Expandable Chat Drawer Container */}
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 50, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="w-[360px] sm:w-[400px] h-[550px] rounded-2xl glass border border-white/10 shadow-2xl flex flex-flow flex-col overflow-hidden bg-slate-950/95 backdrop-blur-xl relative"
+            exit={{ opacity: 0, y: 24, scale: 0.98 }}
+            transition={{ duration: 0.3, ease: EASE_OUT }}
+            className="fixed bottom-6 right-6 w-[360px] sm:w-[400px] max-w-[calc(100vw-3rem)] h-[560px] max-h-[calc(100dvh-6rem)] rounded-[var(--radius-card)] bg-paper border border-rule shadow-whisper flex flex-col overflow-hidden"
           >
-            {/* Ambient Inner Glow decoration */}
-            <div className="absolute top-[-30px] right-[-30px] w-36 h-36 bg-indigo-500/25 blur-3xl rounded-full pointer-events-none" />
-
             {/* Chat Drawer Header */}
-            <div className="flex justify-between items-center px-4 py-3.5 border-b border-white/5 bg-slate-900/50 relative z-10">
+            <div className="flex justify-between items-center px-4 py-3 border-b border-rule">
               <div className="flex items-center gap-2.5">
-                <div className="h-8 w-8 bg-indigo-600/10 text-indigo-400 border border-indigo-500/20 rounded-xl flex items-center justify-center shadow-sm shrink-0">
-                  <Sparkles className="h-4 w-4" fill="currentColor" />
+                <div className="w-8 h-8 bg-accent-soft text-accent rounded-[var(--radius-input)] flex items-center justify-center shrink-0">
+                  <Sparkles className="h-4 w-4" />
                 </div>
-                <div className="text-left">
-                  <h3 className="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
-                    EVO <span className="text-indigo-400 font-bold uppercase text-[9px] bg-indigo-500/10 px-1.5 py-0.5 rounded-md border border-indigo-500/15">AI Chat</span>
-                  </h3>
-                  <p className="text-[10px] text-emerald-400 font-bold tracking-wide">ONLINE</p>
+                <div className="text-left leading-tight">
+                  <h3 className="font-display font-semibold text-sm text-ink">EVO AI</h3>
+                  <p className="text-[11px] text-muted">Edits your tasks as you talk.</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 {messages.length > 0 && (
                   <button
                     onClick={clearChat}
-                    className="text-[10px] font-bold text-rose-500 hover:text-rose-400 uppercase bg-rose-500/10 border border-rose-500/10 hover:border-rose-500/25 px-2 py-1 rounded-lg transition-all cursor-pointer"
+                    className="h-8 px-2.5 rounded-[var(--radius-input)] text-[11px] font-medium text-danger hover:bg-danger-soft transition-colors cursor-pointer"
                   >
                     Reset
                   </button>
                 )}
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="h-7 w-7 rounded-lg text-white/40 hover:text-white hover:bg-white/5 flex items-center justify-center transition-colors cursor-pointer"
+                  aria-label="Close AI assistant"
+                  className="icon-btn"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -234,28 +231,30 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
             </div>
 
             {/* Chat Dialogue Messages scrolling area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 relative z-10 scrollbar-thin scrollbar-thumb-white/5 scrollbar-track-transparent">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 px-6 opacity-60">
-                  <div className="h-12 w-12 bg-indigo-500/10 text-indigo-400 rounded-2xl border border-indigo-500/15 flex items-center justify-center mb-1">
+                <div className="h-full flex flex-col items-center justify-center text-center space-y-4 px-6">
+                  <div className="w-12 h-12 bg-accent-soft text-accent rounded-[var(--radius-card)] flex items-center justify-center">
                     <Sparkles className="h-6 w-6" />
                   </div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-white">Ask EVO AI Assistant</p>
-                  <p className="text-xs text-white/40 leading-relaxed max-w-[240px]">
-                    Create, list, mark complete, or delete your tasks using simple natural language.
-                  </p>
-                  <div className="flex flex-flow flex-col gap-2 w-full pt-2">
+                  <div className="space-y-1">
+                    <p className="font-display font-semibold text-sm text-ink">Ask EVO AI</p>
+                    <p className="text-xs text-muted leading-relaxed max-w-[240px]">
+                      Create, complete, or delete tasks in plain language.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 w-full pt-1">
                     <button
                       onClick={() => setInputValue('Show my pending tasks')}
-                      className="text-left text-xs bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 px-3.5 py-2 rounded-xl text-indigo-300 transition-all font-medium cursor-pointer"
+                      className="text-left text-xs bg-paper-2 hover:bg-paper-3 border border-rule px-3.5 py-2.5 rounded-[var(--radius-input)] text-ink transition-colors cursor-pointer"
                     >
-                      "Show my pending tasks"
+                      “Show my pending tasks”
                     </button>
                     <button
-                      onClick={() => setInputValue('Add a high priority task study chemistry tonight')}
-                      className="text-left text-xs bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/10 px-3.5 py-2 rounded-xl text-indigo-300 transition-all font-medium cursor-pointer"
+                      onClick={() => setInputValue('Add a high priority task to study chemistry tonight')}
+                      className="text-left text-xs bg-paper-2 hover:bg-paper-3 border border-rule px-3.5 py-2.5 rounded-[var(--radius-input)] text-ink transition-colors cursor-pointer"
                     >
-                      "Add a task to study chemistry tonight"
+                      “Add a high-priority task to study chemistry tonight”
                     </button>
                   </div>
                 </div>
@@ -266,9 +265,9 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                     className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl text-xs font-medium leading-relaxed leading-normal ${msg.role === 'user'
-                        ? 'bg-indigo-600 text-white rounded-br-none shadow-md shadow-indigo-600/10 border border-indigo-500/20'
-                        : 'bg-white/5 text-slate-200 border border-white/5 rounded-bl-none'
+                      className={`max-w-[85%] px-3.5 py-2.5 rounded-[var(--radius-card)] text-sm leading-relaxed ${msg.role === 'user'
+                        ? 'bg-accent text-accent-ink rounded-br-sm'
+                        : 'bg-paper-2 border border-rule text-ink rounded-bl-sm'
                         }`}
                     >
                       {msg.content}
@@ -278,13 +277,13 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                     {msg.role === 'assistant' && toolLogs[msg.id] && (
                       <div className="flex flex-wrap gap-1.5 mt-2 ml-1">
                         {toolLogs[msg.id].map((toolCall, idx) => (
-                          <div
+                          <span
                             key={idx}
-                            className="flex items-center gap-1.5 text-[9px] font-bold bg-white/5 text-white/50 border border-white/5 px-2 py-0.5 rounded-md shadow-sm shrink-0"
+                            className="chip"
                           >
                             {getToolIcon(toolCall.tool)}
-                            <span>{getToolLabel(toolCall.tool, toolCall.result)}</span>
-                          </div>
+                            {getToolLabel(toolCall.tool, toolCall.result)}
+                          </span>
                         ))}
                       </div>
                     )}
@@ -294,11 +293,11 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
 
               {/* Loader/Typing indicator */}
               {isLoading && (
-                <div className="flex flex-col items-flow items-start">
-                  <div className="bg-white/5 border border-white/5 px-4 py-3 rounded-2xl rounded-bl-none flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="h-1.5 w-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="h-1.5 w-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="flex items-start">
+                  <div className="bg-paper-2 border border-rule px-4 py-3 rounded-[var(--radius-card)] rounded-bl-sm flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <span className="h-1.5 w-1.5 bg-accent rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
               )}
@@ -309,22 +308,28 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
             {/* Chat Drawer Input Bar */}
             <form
               onSubmit={handleSendMessage}
-              className="p-3 border-t border-white/5 bg-slate-950 flex items-center gap-2 relative z-10"
+              className="p-3 border-t border-rule flex items-center gap-2"
             >
               <input
                 type="text"
-                placeholder="Ask me to do anything..."
+                placeholder="Ask me to do anything…"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 disabled={isLoading}
-                className="flex-1 bg-white/5 border border-white/5 hover:border-white/10 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none transition-all disabled:opacity-50"
+                aria-label="Message the assistant"
+                className="input flex-1"
               />
               <button
                 type="submit"
                 disabled={!inputValue.trim() || isLoading}
-                className="h-9 w-9 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 hover:shadow-indigo-500/30 border border-white/10 transition-all cursor-pointer active:scale-95 disabled:opacity-30 disabled:pointer-events-none shrink-0"
+                aria-label="Send message"
+                className="h-11 w-11 shrink-0 rounded-[var(--radius-input)] bg-accent text-accent-ink flex items-center justify-center transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Send className="h-4 w-4" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             </form>
           </motion.div>
