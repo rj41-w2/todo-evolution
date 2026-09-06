@@ -27,61 +27,54 @@ app = FastAPI(title="Todo API (Phase II - Authenticated)", version="2.0.0")
 # CORS Middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # JWT Secret and JWKS configuration
-BETTER_AUTH_SECRET = os.getenv("BETTER_AUTH_SECRET", "fallback_auth_secret_key_12984712")
-JWKS_URL = os.getenv("JWKS_URL", "http://localhost:3000/api/auth/jwks")
+JWKS_URL = os.getenv("JWKS_URL", "http://frontend:3000/api/auth/jwks")
 jwks_client = PyJWKClient(JWKS_URL)
 
 # Dependency for extracting and verifying JWT tokens
 def get_current_user(authorization: Optional[str] = Header(None)) -> str:
-    print(f"[DEBUG AUTH] Authorization header: {authorization}")
     if not authorization:
-        print("[DEBUG AUTH] Error: Authorization header is missing")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization token is missing"
         )
     
-    if not authorization.startswith("Bearer "):
-        print("[DEBUG AUTH] Error: Invalid authorization scheme")
+    scheme, _, token = authorization.partition(" ")
+    token = token.strip()
+    if scheme.lower() != "bearer" or not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization scheme (must be Bearer token)"
         )
     
-    token = authorization.split(" ")[1]
-    print(f"[DEBUG AUTH] Extracted token: {token[:15]}...{token[-15:] if len(token) > 30 else ''}")
     try:
         # Fetch public keys dynamically from the Better Auth JWKS endpoint based on 'kid' header
         signing_key = jwks_client.get_signing_key_from_jwt(token)
         # Decode and verify the EdDSA signature using the public key, ignoring audience constraint
         payload = jwt.decode(token, signing_key.key, options={"verify_aud": False}, algorithms=["EdDSA"])
-        print(f"[DEBUG AUTH] Successfully decoded token payload: {payload}")
         user_id = payload.get("sub")
         if not user_id:
-            print("[DEBUG AUTH] Error: Missing sub claim in JWT payload")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token structure: Missing user id (subject)"
             )
         return user_id
     except jwt.ExpiredSignatureError:
-        print("[DEBUG AUTH] Error: JWT has expired")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization token has expired"
         )
     except jwt.InvalidTokenError as e:
-        print(f"[DEBUG AUTH] Error decoding JWT: {str(e)}")
+        # Do not expose token validation details to clients or logs.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authorization token: {str(e)}"
+            detail="Invalid authorization token"
         )
 
 @app.get("/")
@@ -352,11 +345,10 @@ Guidelines:
                 else:
                     response_text = response_message.content
 
-    except Exception as e:
-        print(f"[DEBUG GEMINI ERROR] Error during generation: {str(e)}")
+    except Exception:
         db.delete(user_msg_record)
         db.commit()
-        raise HTTPException(status_code=500, detail=f"AI Chatbot service error: {str(e)}")
+        raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")
 
     assistant_msg_record = Message(
         user_id=user_id,

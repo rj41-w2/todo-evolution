@@ -21,7 +21,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { data, error: authError } = await authClient.signIn.email({
+      const { error: authError } = await authClient.signIn.email({
         email,
         password,
       });
@@ -32,8 +32,8 @@ export default function LoginPage() {
         router.push('/');
         router.refresh();
       }
-    } catch (err: any) {
-      setError(err?.message || err?.toString() || 'An unexpected error occurred. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
       console.error(err);
     } finally {
       setLoading(false);

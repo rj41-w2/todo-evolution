@@ -23,7 +23,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=True, index=True) # nullable=True to support backward compatibility
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.PENDING)
@@ -36,7 +36,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -44,7 +44,7 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False) # "user" or "assistant"
     content = Column(Text, nullable=False)
@@ -53,11 +53,11 @@ class Message(Base):
 # --- Pydantic Schemas ---
 
 class TaskBase(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=200)
     description: Optional[str] = None
     status: StatusEnum = StatusEnum.PENDING
     priority: PriorityEnum = PriorityEnum.MEDIUM
-    tags: List[str] = []
+    tags: List[str] = Field(default_factory=list, max_length=50)
     due_date: Optional[datetime] = None
     user_id: Optional[str] = None
 
@@ -65,7 +65,7 @@ class TaskCreate(TaskBase):
     pass
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = None
     status: Optional[StatusEnum] = None
     priority: Optional[PriorityEnum] = None
@@ -81,7 +81,7 @@ class TaskResponse(TaskBase):
 
 class ChatRequest(BaseModel):
     conversation_id: Optional[uuid.UUID] = None
-    message: str
+    message: str = Field(min_length=1, max_length=4000)
 
 class ChatResponse(BaseModel):
     conversation_id: uuid.UUID

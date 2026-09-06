@@ -1,5 +1,6 @@
 __pycache__
 .env
+.env.*
 
 
 Hackathon II - Todo Spec-Driven Development.md
@@ -17,6 +18,8 @@ patch.json
 frontend/check-users.js
 frontend/test-auth.js
 frontend/test-db.js
+skills-lock.json
 
 # Helm charts and secrets
 helm/
+.agents

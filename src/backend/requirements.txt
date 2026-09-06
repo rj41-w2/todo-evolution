@@ -9,4 +9,4 @@ python-multipart
 PyJWT
 cryptography
 openai
-mcp
+mcp<2

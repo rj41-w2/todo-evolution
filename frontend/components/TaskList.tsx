@@ -7,6 +7,7 @@ import { Task } from '../types';
 
 interface TaskListProps {
   tasks: Task[];
+  hasAnyTasks: boolean;
   onToggleStatus: (task: Task) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
 }
@@ -23,11 +24,11 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskListProps) {
+export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteTask }: TaskListProps) {
   const open = tasks.filter(t => t.status !== 'Completed');
   const done = tasks.filter(t => t.status === 'Completed');
 
-  if (tasks.length === 0) {
+  if (tasks.length === 0 && !hasAnyTasks) {
     return (
       <div className="py-16 text-center space-y-1">
         <p className="font-display text-lg font-semibold text-ink">No tasks yet.</p>
@@ -36,7 +37,7 @@ export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskLi
     );
   }
 
-  if (open.length === 0 && done.length === 0) {
+  if (tasks.length === 0) {
     return (
       <div className="py-16 text-center">
         <p className="text-sm text-muted">No tasks match your filters.</p>
@@ -99,8 +100,7 @@ export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskLi
                 <p className="task-desc line-clamp-1">{task.description}</p>
               )}
 
-              {(task.tags.length > 0 || task.due_date) && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                   <span className="chip">
                     <span
                       className="h-1.5 w-1.5 rounded-full shrink-0"
@@ -122,8 +122,7 @@ export default function TaskList({ tasks, onToggleStatus, onDeleteTask }: TaskLi
                       Due {formatDate(task.due_date)}
                     </span>
                   )}
-                </div>
-              )}
+              </div>
             </div>
           </motion.div>
         );

@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageSquare, Send, X, Sparkles, Check, Trash2,
-  Plus, Edit, List, AlertCircle, Loader2
+  Plus, Edit, List, Loader2
 } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
-import { ChatMessage, ToolCall, ChatResponse } from '../types';
+import { AuthUser, ChatMessage, ToolCall, ChatResponse } from '../types';
 
 interface ChatbotProps {
   onTaskMutation: () => void;
@@ -20,7 +20,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [toolLogs, setToolLogs] = useState<Record<string, ToolCall[]>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -132,7 +132,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
       } else {
         throw new Error('Failed to get response from assistant');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Chat error:', err);
       // Append a local error message
       const errorMsg: ChatMessage = {
@@ -158,8 +158,8 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
     }
   };
 
-  const getToolLabel = (toolName: string, result: any) => {
-    const title = result?.title ? `"${result.title}"` : 'task';
+  const getToolLabel = (toolName: string, result: Record<string, unknown>) => {
+    const title = typeof result?.title === 'string' ? `"${result.title}"` : 'task';
     switch (toolName) {
       case 'add_task': return `Added task ${title}`;
       case 'complete_task': return `Completed task ${title}`;

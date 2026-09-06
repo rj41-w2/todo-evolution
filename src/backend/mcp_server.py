@@ -9,6 +9,14 @@ from models import Task, StatusEnum, PriorityEnum
 
 mcp = FastMCP("TodoMCP")
 
+def parse_due_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError("due_date must be a valid ISO-8601 datetime") from exc
+
 @mcp.tool()
 def add_task(
     user_id: str,
@@ -28,6 +36,9 @@ def add_task(
         tags: Optional list of tags.
         due_date: Optional ISO-8601 formatted datetime string for the task deadline (e.g. "2026-07-01T15:00:00Z").
     """
+    if not title or not title.strip():
+        return json.dumps({"error": "title is required"})
+
     db = SessionLocal()
     try:
         p_enum = PriorityEnum.MEDIUM
@@ -39,12 +50,7 @@ def add_task(
             elif priority.lower() == "high":
                 p_enum = PriorityEnum.HIGH
 
-        parsed_due_date = None
-        if due_date:
-            try:
-                parsed_due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
-            except ValueError:
-                pass
+        parsed_due_date = parse_due_date(due_date)
 
         task_data = {
             "user_id": user_id,
@@ -242,6 +248,8 @@ def update_task(
             return json.dumps({"error": f"Task not found with ID or name matching '{task_id}'."})
             
         if title is not None:
+            if not title.strip():
+                return json.dumps({"error": "title cannot be empty"})
             db_task.title = title
         if description is not None:
             db_task.description = description
@@ -257,10 +265,7 @@ def update_task(
                 db_task.priority = p_enum
         
         if due_date is not None:
-            try:
-                db_task.due_date = datetime.fromisoformat(due_date.replace('Z', '+00:00'))
-            except ValueError:
-                pass
+            db_task.due_date = parse_due_date(due_date)
                 
         db.commit()
         db.refresh(db_task)

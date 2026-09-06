@@ -59,7 +59,7 @@ export default function TaskControls({
 
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
+           onChange={(e) => setSortBy(e.target.value as TaskControlsProps['sortBy'])}
           aria-label="Sort tasks"
           className="input select-input flex-1 sm:flex-none min-w-[130px]"
         >

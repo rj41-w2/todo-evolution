@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import TaskForm from '../components/TaskForm';
 import TaskList from '../components/TaskList';
 import TaskControls from '../components/TaskControls';
 import { ThemeToggle } from '../components/ThemeToggle';
-import { Task, TaskCreate, Status, Priority } from '../types';
+import { AuthUser, Task, TaskCreate, Status, Priority } from '../types';
 import { LogOut } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
@@ -16,7 +17,7 @@ import Chatbot from '../components/Chatbot';
 export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,9 +218,9 @@ export default function Home() {
     <div className="min-h-dvh font-body">
       <header className="top-rail">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <a href="/" className="wordmark">
+          <Link href="/" className="wordmark">
             EVO<span className="text-accent">TODO</span>
-          </a>
+          </Link>
 
           <div className="flex items-center gap-2">
             {user && (
@@ -285,7 +286,7 @@ export default function Home() {
               <div className="h-8 w-8 border-2 border-rule-2 border-t-accent rounded-full animate-spin" />
             </motion.div>
           ) : (
-            <TaskList tasks={filteredAndSortedTasks} onToggleStatus={toggleTaskStatus} onDeleteTask={deleteTask} />
+            <TaskList tasks={filteredAndSortedTasks} hasAnyTasks={tasks.length > 0} onToggleStatus={toggleTaskStatus} onDeleteTask={deleteTask} />
           )}
         </AnimatePresence>
       </main>

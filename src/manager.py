@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
-from typing import List, Optional, Callable
+from calendar import monthrange
+from typing import List, Optional
 from models import Task, Status, Priority, Recurrence
 
 class TaskManager:
@@ -17,6 +18,9 @@ class TaskManager:
                  due_date: Optional[datetime] = None, 
                  is_recurring: bool = False,
                  recurrence_period: Recurrence = Recurrence.NONE) -> Task:
+        if not title or not title.strip():
+            raise ValueError("Task title is required")
+
         task = Task(
             id=self._next_id,
             title=title,
@@ -43,12 +47,14 @@ class TaskManager:
         if not task:
             return None
         
+        was_completed = task.status == Status.COMPLETED
         for key, value in kwargs.items():
             if hasattr(task, key):
                 setattr(task, key, value)
         
         # Handle recurring logic if status changed to completed
-        if kwargs.get('status') == Status.COMPLETED and task.is_recurring:
+        if (kwargs.get('status') == Status.COMPLETED and not was_completed
+                and task.is_recurring):
             self.handle_recurring_logic(task)
             
         return task
@@ -70,8 +76,13 @@ class TaskManager:
 
     def sort_tasks(self, by: str = 'id', reverse: bool = False) -> List[Task]:
         if by == 'due_date':
-            # Put tasks without due date at the end
-            return sorted(self.tasks, key=lambda t: (t.due_date is None, t.due_date), reverse=reverse)
+            # Keep undated tasks at the end in both sort directions.
+            dated = sorted(
+                (task for task in self.tasks if task.due_date is not None),
+                key=lambda task: task.due_date,
+                reverse=reverse,
+            )
+            return dated + [task for task in self.tasks if task.due_date is None]
         elif by == 'priority':
             priority_map = {Priority.HIGH: 3, Priority.MEDIUM: 2, Priority.LOW: 1}
             return sorted(self.tasks, key=lambda t: priority_map[t.priority], reverse=reverse)
@@ -94,8 +105,10 @@ class TaskManager:
         elif task.recurrence_period == Recurrence.WEEKLY:
             next_due += timedelta(weeks=1)
         elif task.recurrence_period == Recurrence.MONTHLY:
-            # Simple month increment
-            next_due += timedelta(days=30) 
+            next_month = next_due.month % 12 + 1
+            next_year = next_due.year + (next_due.month == 12)
+            next_day = min(next_due.day, monthrange(next_year, next_month)[1])
+            next_due = next_due.replace(year=next_year, month=next_month, day=next_day)
 
         self.add_task(
             title=task.title,

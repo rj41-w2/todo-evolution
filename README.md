@@ -4,7 +4,7 @@ EVO-TODO is a multi-phase software engineering project designed to demonstrate t
 
 ## 🚀 The Roadmap (5 Phases)
 
-This project is structured into five distinct architectural phases. Currently, we have completed Phase IV and Phase V is planned.
+This project is structured into five distinct architectural phases. Currently, the application and containerization work is implemented; Kubernetes/Helm deployment remains planned work.
 
 - [x] **Phase I: The In-Memory CLI**
   - Robust Python CLI with in-memory state.
@@ -29,7 +29,7 @@ This project is structured into five distinct architectural phases. Currently, w
 - **Architecture:** Clean separation between `TaskManager` logic and CLI presentation.
 
 ### Phase II (Web)
-- **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS, Framer Motion (Animations).
+- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind CSS, Framer Motion (Animations).
 - **Backend:** FastAPI (Python), SQLAlchemy ORM.
 - **Database:** PostgreSQL (Hosted on Neon DB).
 - **Icons:** Lucide React.
@@ -59,6 +59,7 @@ This project is structured into five distinct architectural phases. Currently, w
    uvicorn main:app --reload
    ```
 
+
 #### 2. Frontend (Next.js)
 1. Navigate to `frontend/`.
 2. Install dependencies:
@@ -78,7 +79,8 @@ This project is structured into five distinct architectural phases. Currently, w
 - [x] Neon DB PostgreSQL Integration
 - [x] Modern Cinematic UI with Next.js
 - [x] AI Chatbot Integration via MCP & OpenAI SDK
-- [x] Containerization with Docker & Helm for Kubernetes
+- [x] Containerization with Docker Compose
+- [ ] Helm/Kubernetes deployment
 - [ ] Phase 5: Mobile App & Global Scale (Next Step)
 
 ---

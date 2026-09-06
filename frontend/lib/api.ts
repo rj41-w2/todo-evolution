@@ -8,7 +8,6 @@ import { API_BASE_URL } from "./config";
 export async function secureFetch(path: string, options: RequestInit = {}) {
   // Retrieve the JWT token using the Better Auth JWT client plugin.
   const tokenResult = await authClient.token();
-  console.log("Token Result:", tokenResult);
   const token = tokenResult?.data?.token;
 
   const headers = new Headers(options.headers || {});

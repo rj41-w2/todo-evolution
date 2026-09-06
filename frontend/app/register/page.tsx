@@ -22,7 +22,7 @@ export default function RegisterPage() {
     setError('');
 
     try {
-      const { data, error: authError } = await authClient.signUp.email({
+      const { error: authError } = await authClient.signUp.email({
         email,
         password,
         name,
@@ -34,8 +34,8 @@ export default function RegisterPage() {
         router.push('/');
         router.refresh();
       }
-    } catch (err: any) {
-      setError(err?.message || err?.toString() || 'An unexpected error occurred. Please try again.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
       console.error(err);
     } finally {
       setLoading(false);

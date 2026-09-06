@@ -1,6 +1,12 @@
 export type Priority = "Low" | "Medium" | "High";
 export type Status = "Pending" | "Completed";
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -39,8 +45,8 @@ export interface ChatMessage {
 
 export interface ToolCall {
   tool: string;
-  parameters: Record<string, any>;
-  result: Record<string, any>;
+  parameters: Record<string, unknown>;
+  result: Record<string, unknown>;
 }
 
 export interface ChatResponse {

@@ -25,7 +25,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
       priority,
       tags: tags.split(',').map(t => t.trim()).filter(t => t !== ''),
       status: 'Pending',
-      due_date: dueDate ? new Date(dueDate).toISOString() : undefined
+      due_date: dueDate ? `${dueDate}T00:00:00` : undefined
     };
 
     // Instant feedback: clear the fields immediately!

@@ -12,8 +12,9 @@ RUN npm ci
 # Copy all source files
 COPY . .
 
-# Set internal backend URL for Next.js rewrites build-time resolution
-ENV INTERNAL_BACKEND_URL="http://evo-todo-backend-service:8000"
+# Backend hostname inlined by Next.js at build time
+ARG INTERNAL_BACKEND_URL=http://backend:8000
+ENV INTERNAL_BACKEND_URL=$INTERNAL_BACKEND_URL
 
 # Build the Next.js application
 RUN npm run build
