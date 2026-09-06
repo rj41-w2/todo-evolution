@@ -1,89 +1,159 @@
-# EVO-TODO: The Evolutionary Task Manager
+# EVO-TODO
 
-EVO-TODO is a multi-phase software engineering project designed to demonstrate the evolution of an application from a simple terminal-based script to a sophisticated, production-grade full-stack platform.
+A full-stack, AI-powered task management platform built as an evolutionary software engineering project. It progresses from a Python CLI to a production-grade web application with authentication, a chatbot powered by Google Gemini via the Model Context Protocol (MCP), and Docker containerization.
 
-## 🚀 The Roadmap (5 Phases)
+## Architecture
 
-This project is structured into five distinct architectural phases. Currently, the application and containerization work is implemented; Kubernetes/Helm deployment remains planned work.
+```
+┌──────────────────────────────────────────────────────────┐
+│                     Frontend (Next.js)                     │
+│  Next.js 16 App Router · React 19 · TypeScript · Tailwind │
+│  Better Auth (email/password + JWT) · Framer Motion       │
+└────────────────────────┬─────────────────────────────────┘
+                         │  /api/backend/* (rewrite)
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│                  Backend (FastAPI)                         │
+│  SQLAlchemy ORM · JWT verification · OpenAI SDK           │
+│  MCP stdio subprocess · Gemini 2.5 Flash                  │
+└────────────────────────┬─────────────────────────────────┘
+                         │  psycopg2
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│                    Database (PostgreSQL)                   │
+│                      Neon (serverless)                     │
+└──────────────────────────────────────────────────────────┘
+```
 
-- [x] **Phase I: The In-Memory CLI**
-  - Robust Python CLI with in-memory state.
-  - Features: Priority levels, tags, recurrence, and overdue tracking.
-- [x] **Phase II: Decoupled Full-Stack Architecture**
-  - Transition to a modern Web UI and REST API.
-  - Backend CRUD & Database integrated; Frontend core UI complete.
-- [x] **Phase III: AI Chatbot & MCP Integration**
-  - AI Assistant integration using OpenAI SDK and MCP.
-- [x] **Phase IV: Containerization & Orchestration**
-  - Dockerfiles and Helm charts for Kubernetes deployment.
-- [ ] **Phase V: Global Scale & Mobile Integration** (Planned)
-  - Cloud-native deployment and cross-platform mobile support.
+## Features
 
----
+- **Full CRUD** -- Create, read, update, and delete tasks via REST API
+- **Authentication** -- Email/password signup and login with Better Auth and EdDSA JWTs
+- **Multi-tenant** -- All API routes enforce per-user data isolation
+- **AI Chatbot** -- Natural language task management through Gemini 2.5 Flash, using MCP tool calls to perform actions
+- **Dark/Light Theme** -- System-aware theme toggle with Framer Motion transitions
+- **Dockerized** -- Multi-stage builds for both services, orchestrated with Docker Compose
 
-## 🛠 Tech Stack
+## Tech Stack
+
+| Layer      | Technology                                                        |
+| ---------- | ----------------------------------------------------------------- |
+| Frontend   | Next.js 16, React 19, TypeScript, Tailwind CSS v4, Framer Motion |
+| Auth       | Better Auth (email/password, EdDSA JWT)                           |
+| Backend    | FastAPI, Pydantic, SQLAlchemy                                     |
+| AI         | Google Gemini 2.5 Flash (OpenAI-compat endpoint), MCP v1         |
+| Database   | PostgreSQL (Neon)                                                 |
+| Containers | Docker, Docker Compose                                            |
+| CI         | GitHub Actions (Python tests, frontend lint + typecheck)          |
+
+## Project Structure
+
+```
+todo-evolution/
+├── src/
+│   ├── main.py            # Phase I CLI entry point
+│   ├── manager.py          # TaskManager logic
+│   ├── models.py           # Phase I data models
+│   └── backend/
+│       ├── main.py         # FastAPI application
+│       ├── models.py       # SQLAlchemy + Pydantic models
+│       ├── database.py     # Engine & session config
+│       ├── mcp_server.py   # MCP tool definitions (stdio)
+│       └── requirements.txt
+├── frontend/
+│   ├── app/                # Next.js App Router pages
+│   ├── components/         # React UI components
+│   ├── lib/                # Auth helpers, API client
+│   ├── types/              # Shared TypeScript types
+│   ├── proxy.ts            # Auth redirect middleware
+│   ├── Dockerfile
+│   └── next.config.ts      # Backend rewrite rules
+├── tests/
+│   └── test_manager.py
+├── docker-compose.yml
+├── .github/workflows/ci.yml
+├── TODO.md                 # Original roadmap & notes
+└── README.md
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 20+
+- PostgreSQL (or a Neon database)
+- A Google Gemini API key
+
+### Environment Variables
+
+Create a `.env` file in the project root (for Docker) or in `src/backend/` and `frontend/` individually:
+
+| Variable              | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `DATABASE_URL`        | PostgreSQL connection string                   |
+| `BETTER_AUTH_SECRET`  | Secret key for Better Auth session signing     |
+| `GEMINI_API_KEY`      | Google Gemini API key for the chatbot          |
+| `BETTER_AUTH_URL`     | Base URL for Better Auth (default: localhost)  |
+
+### Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000`
+
+### Local Development
+
+**Backend:**
+
+```bash
+cd src/backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+**Frontend:**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ### Phase I (CLI)
-- **Language:** Python 3.10+
-- **Key Modules:** `datetime`, `uuid`, `enum`
-- **Architecture:** Clean separation between `TaskManager` logic and CLI presentation.
 
-### Phase II (Web)
-- **Frontend:** Next.js 16 (App Router), TypeScript, Tailwind CSS, Framer Motion (Animations).
-- **Backend:** FastAPI (Python), SQLAlchemy ORM.
-- **Database:** PostgreSQL (Hosted on Neon DB).
-- **Icons:** Lucide React.
+```bash
+cd src
+python main.py
+```
 
----
+## Testing
 
-## 🏃‍♂️ Getting Started
+```bash
+python -m unittest discover -s tests -v
+```
 
-### 📟 Phase I: Python CLI
-1. Navigate to the `src/` directory.
-2. Run the application:
-   ```bash
-   python main.py
-   ```
+CI also runs frontend lint and type checking:
 
-### 🌐 Phase II: Full-Stack Web App
+```bash
+cd frontend
+npm run lint
+npx tsc --noEmit
+```
 
-#### 1. Backend (FastAPI)
-1. Navigate to `src/backend/`.
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Set up your `.env` file with your `DATABASE_URL`.
-4. Run the server:
-   ```bash
-   uvicorn main:app --reload
-   ```
+## Roadmap
 
+- [x] Phase I -- In-memory CLI
+- [x] Phase II -- Decoupled full-stack (FastAPI + Next.js + PostgreSQL)
+- [x] Phase III -- AI chatbot with MCP and Gemini
+- [x] Phase IV -- Docker containerization
+- [ ] Phase V -- Kubernetes/Helm deployment, mobile client, global scale
 
-#### 2. Frontend (Next.js)
-1. Navigate to `frontend/`.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+See [TODO.md](TODO.md) for the original roadmap details.
 
----
+## License
 
-## 📈 Current Progress (Phase IV Completed)
-- [x] FastAPI REST Endpoints (CRUD)
-- [x] Neon DB PostgreSQL Integration
-- [x] Modern Cinematic UI with Next.js
-- [x] AI Chatbot Integration via MCP & OpenAI SDK
-- [x] Containerization with Docker Compose
-- [ ] Helm/Kubernetes deployment
-- [ ] Phase 5: Mobile App & Global Scale (Next Step)
-
----
-
-## 📄 License
-This project is for educational purposes as part of an evolutionary coding journey.
+Educational project.
