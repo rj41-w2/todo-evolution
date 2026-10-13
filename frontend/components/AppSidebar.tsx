@@ -5,12 +5,14 @@ import { ThemeToggle } from './ThemeToggle';
 import { SidebarNav } from './SidebarNav';
 import { SignOutButton } from './SignOutButton';
 import { useTasks } from './TasksProvider';
+import { useWorkspaceName } from '../lib/workspace';
 
 /**
- * The sidebar contents: wordmark, grouped nav, and the signed-in identity with
- * theme + sign-out. Rendered both in the static sidebar and inside the mobile
- * drawer, so the identity and theme live in the shell rather than on a page.
- * Sign-out is the same shared control the settings page uses.
+ * The sidebar contents: wordmark, the workspace label chosen at first run,
+ * grouped nav, and the signed-in identity with theme + sign-out. Rendered both
+ * in the static sidebar and inside the mobile drawer, so the identity and theme
+ * live in the shell rather than on a page. Sign-out is the same shared control
+ * the settings page uses.
  */
 export function AppSidebar({
   onNavigate,
@@ -20,12 +22,20 @@ export function AppSidebar({
   className?: string;
 }) {
   const { user } = useTasks();
+  const workspaceName = useWorkspaceName();
 
   return (
     <div className={`flex-col gap-6 ${className}`}>
-      <Link href="/" className="wordmark block px-2 py-1" onClick={onNavigate}>
-        EVO<span className="text-accent">TODO</span>
-      </Link>
+      <div className="px-2 py-1">
+        <Link href="/" className="wordmark block" onClick={onNavigate}>
+          EVO<span className="text-accent">TODO</span>
+        </Link>
+        {workspaceName && (
+          <p className="mt-0.5 truncate text-meta text-muted" title={workspaceName}>
+            {workspaceName}
+          </p>
+        )}
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SidebarNav onNavigate={onNavigate} />
