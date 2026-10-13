@@ -33,12 +33,12 @@ export default function TaskControls({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as Status | 'All')}
           aria-label="Filter by status"
-          className="input select-input flex-1 sm:flex-none min-w-[130px]"
+          className="input select-input text-meta flex-1 sm:flex-none min-w-[120px]"
         >
           <option value="All" className="bg-paper text-ink">All status</option>
           <option value="Pending" className="bg-paper text-ink">Open</option>
@@ -49,7 +49,7 @@ export default function TaskControls({
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value as Priority | 'All')}
           aria-label="Filter by priority"
-          className="input select-input flex-1 sm:flex-none min-w-[130px]"
+          className="input select-input text-meta flex-1 sm:flex-none min-w-[120px]"
         >
           <option value="All" className="bg-paper text-ink">All priority</option>
           <option value="High" className="bg-paper text-ink">High</option>
@@ -61,7 +61,7 @@ export default function TaskControls({
           value={sortBy}
            onChange={(e) => setSortBy(e.target.value as TaskControlsProps['sortBy'])}
           aria-label="Sort tasks"
-          className="input select-input flex-1 sm:flex-none min-w-[130px]"
+          className="input select-input text-meta flex-1 sm:flex-none min-w-[120px]"
         >
           <option value="created_at" className="bg-paper text-ink">Newest</option>
           <option value="due_date" className="bg-paper text-ink">Due date</option>

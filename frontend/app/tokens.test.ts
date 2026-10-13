@@ -164,6 +164,27 @@ describe('design tokens — warm canvas contract', () => {
   })
 })
 
+describe('primary CTA contrast (the shared class behind every page)', () => {
+  const block = new RegExp('\\.btn-primary\\s*\\{([\\s\\S]*?)\\}').exec(globalsCss)?.[1] ?? ''
+
+  test('fills with the AA-safe accent role, not the decorative graphic violet', () => {
+    const background = /background:\s*([^;]+);/.exec(block)?.[1].trim()
+    expect(background, '.btn-primary must use the AA-safe fill').toBe('var(--color-accent-strong)')
+  })
+
+  describe.each([
+    ['light', light],
+    ['dark', dark],
+  ])('%s CTA label meets AA', (_name, mode) => {
+    test('accent-ink on the accent-strong fill reaches 4.5:1', () => {
+      const fill = mode.get('--color-accent-strong')
+      const label = mode.get('--color-accent-ink')
+      if (!fill || !label) throw new Error('missing accent tokens')
+      expect(contrast(parseColor(label), parseColor(fill))).toBeGreaterThanOrEqual(4.5)
+    })
+  })
+})
+
 describe('stylesheet hygiene', () => {
   test('no transition-all, glass, glow or blur', () => {
     for (const css of [tokensCss, globalsCss]) {

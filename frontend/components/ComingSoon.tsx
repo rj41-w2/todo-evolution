@@ -21,7 +21,7 @@ export function ComingSoon({ title, description }: ComingSoonProps) {
         <p className="font-mono text-micro uppercase tracking-[0.08em] text-muted">
           Coming soon
         </p>
-        <h1 className="page-header text-[var(--text-2xl)]">{title}</h1>
+        <h1 className="page-header text-[length:var(--text-2xl)]">{title}</h1>
         <p className="max-w-prose text-md text-ink-2">{description}</p>
       </section>
 

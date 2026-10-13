@@ -43,14 +43,14 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
 
   return (
     <section aria-label="Add a task">
-      <form onSubmit={handleSubmit} className="bg-paper-2 border border-rule rounded-[var(--radius-card)] p-4 sm:p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="bg-paper-2 border border-rule rounded-[var(--radius-card)] p-4 space-y-3">
         <input
           type="text"
           placeholder="What needs to be done?"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           aria-label="Task title"
-          className="w-full bg-transparent text-lg font-medium placeholder:text-muted focus:outline-none text-ink"
+          className="w-full bg-transparent text-md font-medium placeholder:text-muted focus:outline-none text-ink"
           required
         />
 
@@ -63,13 +63,13 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
           rows={2}
         />
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-2 border-t border-rule">
-          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer">
-            <span className="font-mono text-xs">PRIORITY</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-3 border-t border-rule">
+          <label className="flex items-center gap-2 text-meta text-muted cursor-pointer">
+            <span className="font-mono text-micro uppercase tracking-[0.08em]">Priority</span>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
-              className="select-input bg-transparent border-none p-0 text-sm text-ink cursor-pointer focus:outline-none"
+              className="select-input bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
             >
               <option value="Low" className="bg-paper text-ink">Low</option>
               <option value="Medium" className="bg-paper text-ink">Medium</option>
@@ -77,7 +77,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
             </select>
           </label>
 
-          <label className="flex items-center gap-2 text-sm text-muted group">
+          <label className="flex items-center gap-2 text-meta text-muted group">
             <Tag className="h-4 w-4" />
             <input
               type="text"
@@ -85,18 +85,18 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               aria-label="Tags, comma separated"
-              className="bg-transparent border-none p-0 text-sm w-28 placeholder:text-muted focus:outline-none"
+              className="bg-transparent border-none p-0 text-meta w-28 placeholder:text-muted focus:outline-none"
             />
           </label>
 
-          <label className="flex items-center gap-2 text-sm text-muted">
+          <label className="flex items-center gap-2 text-meta text-muted">
             <Calendar className="h-4 w-4" />
             <input
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               aria-label="Due date"
-              className="bg-transparent border-none p-0 text-sm text-ink cursor-pointer focus:outline-none"
+              className="bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
             />
           </label>
 

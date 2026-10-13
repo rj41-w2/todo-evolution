@@ -51,7 +51,7 @@ export default function LoginPage() {
 
         <div className="bg-card border border-rule rounded-[var(--radius-panel)] shadow-card p-6 sm:p-8">
           <header className="space-y-1.5 mb-6">
-            <h1 className="page-header text-[var(--text-2xl)]">Welcome back.</h1>
+            <h1 className="page-header text-[length:var(--text-2xl)]">Welcome back.</h1>
             <p className="text-sm text-muted">Sign in to manage your tasks.</p>
           </header>
 

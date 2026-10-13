@@ -18,7 +18,7 @@ export function SettingsView() {
     <div className="space-y-8">
       <section className="space-y-1.5">
         <p className="font-mono text-micro uppercase tracking-[0.08em] text-muted">Preferences</p>
-        <h1 className="page-header text-[var(--text-2xl)]">Settings</h1>
+        <h1 className="page-header text-[length:var(--text-2xl)]">Settings</h1>
         <p className="max-w-prose text-md text-ink-2">
           The things that are yours to change: how the app looks, and the account you are signed in as.
         </p>
