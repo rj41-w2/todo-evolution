@@ -25,6 +25,7 @@ npm install
 npm run dev                                      # http://localhost:3000
 npm run lint
 npx tsc --noEmit                                 # typecheck (CI runs lint then tsc)
+npm test                                         # vitest (CI runs after lint + tsc)
 npm run build
 ```
 
