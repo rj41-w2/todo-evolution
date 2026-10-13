@@ -9,6 +9,9 @@ interface TasksContextValue {
   tasks: Task[];
   loading: boolean;
   user: AuthUser | null;
+  /** The last mutation failure, already rolled back, ready to show the user. */
+  error: string | null;
+  dismissError: () => void;
   fetchTasks: () => Promise<void>;
   createTask: (taskData: TaskCreate) => Promise<void>;
   toggleTaskStatus: (task: Task) => Promise<void>;
@@ -29,6 +32,9 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const dismissError = useCallback(() => setError(null), []);
 
   const fetchTasks = useCallback(async () => {
     const session = await authClient.getSession();
@@ -81,6 +87,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       };
 
       // 1. Optimistic update
+      setError(null);
       setTasks(prevTasks => [tempTask, ...prevTasks]);
 
       try {
@@ -98,8 +105,10 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         console.error('Failed to create task:', error);
-        // 3. Rollback on failure
+        // 3. Rollback on failure, and say so — the optimistic row is gone, so
+        //    silence would look like the task was never added.
         setTasks(prevTasks => prevTasks.filter(t => t.id !== tempId));
+        setError('Could not add that task. Nothing was saved — please try again.');
       }
     },
     [user],
@@ -111,6 +120,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       const newStatus: Status = task.status === 'Pending' ? 'Completed' : 'Pending';
 
       // 1. Optimistic update
+      setError(null);
       setTasks(prevTasks => prevTasks.map(t => (t.id === task.id ? { ...t, status: newStatus } : t)));
 
       try {
@@ -130,6 +140,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to update task:', error);
         // 3. Rollback on failure
         setTasks(prevTasks => prevTasks.map(t => (t.id === task.id ? { ...t, status: task.status } : t)));
+        setError('Could not update that task. Its status was put back — please try again.');
       }
     },
     [user],
@@ -145,6 +156,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
       if (!taskToDelete || taskIndex === -1) return;
 
       // 1. Optimistic update
+      setError(null);
       setTasks(prevTasks => prevTasks.filter(t => t.id !== id));
 
       try {
@@ -161,14 +173,15 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
           restored.splice(taskIndex, 0, taskToDelete);
           return restored;
         });
+        setError('Could not delete that task. It was put back — please try again.');
       }
     },
     [user, tasks],
   );
 
   const value = useMemo<TasksContextValue>(
-    () => ({ tasks, loading, user, fetchTasks, createTask, toggleTaskStatus, deleteTask }),
-    [tasks, loading, user, fetchTasks, createTask, toggleTaskStatus, deleteTask],
+    () => ({ tasks, loading, user, error, dismissError, fetchTasks, createTask, toggleTaskStatus, deleteTask }),
+    [tasks, loading, user, error, dismissError, fetchTasks, createTask, toggleTaskStatus, deleteTask],
   );
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;

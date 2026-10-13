@@ -52,7 +52,7 @@ beforeEach(() => {
 })
 
 function Harness() {
-  const { tasks, loading, createTask, toggleTaskStatus, deleteTask } = useTasks()
+  const { tasks, loading, error, dismissError, createTask, toggleTaskStatus, deleteTask } = useTasks()
   const counts = countTasks(tasks)
   const firstOpen = tasks.find(t => t.status === 'Pending')
   return (
@@ -61,11 +61,19 @@ function Harness() {
       <span data-testid="total">{counts.total}</span>
       <span data-testid="open">{counts.open}</span>
       <span data-testid="done">{counts.done}</span>
+      <span data-testid="ids">{tasks.map(t => t.id).join(',')}</span>
+      <span data-testid="error">{error ?? ''}</span>
       <button onClick={() => createTask({ title: 'New task' })}>add</button>
       <button onClick={() => firstOpen && toggleTaskStatus(firstOpen)}>complete</button>
       <button onClick={() => tasks[0] && deleteTask(tasks[0].id)}>delete</button>
+      <button onClick={dismissError}>dismiss</button>
     </div>
   )
+}
+
+/** A response that failed the way the network does — no body, `ok: false`. */
+function failedResponse(): Response {
+  return { ok: false, json: async () => ({}) } as unknown as Response
 }
 
 describe('TasksProvider — one shared tasks source', () => {
@@ -92,5 +100,77 @@ describe('TasksProvider — one shared tasks source', () => {
 
     fireEvent.click(screen.getByText('delete'))
     await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('2'))
+  })
+})
+
+describe('TasksProvider — optimistic updates roll back and surface the failure', () => {
+  test('a failed add drops the optimistic row immediately and reports the error', async () => {
+    mockFetch.mockImplementation(async (path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending')])
+      return failedResponse()
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('add'))
+    // the row is there instantly, before any server round-trip settles
+    expect(screen.getByTestId('total')).toHaveTextContent('2')
+
+    await waitFor(() => expect(screen.getByTestId('total')).toHaveTextContent('1'))
+    expect(screen.getByTestId('error').textContent).not.toBe('')
+  })
+
+  test('a failed toggle restores the original status and reports the error', async () => {
+    mockFetch.mockImplementation(async (path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending')])
+      return failedResponse()
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('complete'))
+    expect(screen.getByTestId('done')).toHaveTextContent('1')
+
+    await waitFor(() => expect(screen.getByTestId('done')).toHaveTextContent('0'))
+    expect(screen.getByTestId('open')).toHaveTextContent('1')
+    expect(screen.getByTestId('error').textContent).not.toBe('')
+  })
+
+  test('a failed delete restores the row at its original position and reports the error', async () => {
+    mockFetch.mockImplementation(async (path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending'), task('b', 'Send invoice', 'Completed')])
+      return failedResponse()
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('delete'))
+    expect(screen.getByTestId('ids')).toHaveTextContent('b')
+
+    await waitFor(() => expect(screen.getByTestId('ids')).toHaveTextContent('a,b'))
+    expect(screen.getByTestId('error').textContent).not.toBe('')
+  })
+
+  test('the surfaced error can be dismissed', async () => {
+    mockFetch.mockImplementation(async (path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending')])
+      return failedResponse()
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('add'))
+    await waitFor(() => expect(screen.getByTestId('error').textContent).not.toBe(''))
+
+    fireEvent.click(screen.getByText('dismiss'))
+    expect(screen.getByTestId('error')).toHaveTextContent('')
   })
 })

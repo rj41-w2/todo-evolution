@@ -162,8 +162,8 @@
 .ledger-row {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-md);
-  padding-block: var(--space-md);
+  gap: var(--space-sm);
+  padding-block: var(--space-sm);
   border-bottom: 1px solid var(--color-rule);
 }
 
@@ -193,13 +193,88 @@
   align-items: center;
   gap: var(--space-2xs);
   padding: 2px var(--space-xs);
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--color-rule);
   background: var(--color-paper-2);
   color: var(--color-ink-2);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-micro);
   white-space: nowrap;
+}
+
+/* ---- Status pill ---- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3xs);
+  padding: 2px var(--space-xs);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-micro);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pill--open {
+  background: var(--color-paper-3);
+  color: var(--color-ink-2);
+}
+
+.pill--done {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+/* ---- Filter tabs ---- */
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: 34px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-pill);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
+}
+
+.tab:hover {
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.tab--active {
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+}
+
+.tab-count {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+}
+
+.tab--active .tab-count {
+  color: var(--color-ink-2);
+}
+
+/* ---- Inline alert (errors are surfaced, never swallowed) ---- */
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--color-danger-soft);
+  border-radius: var(--radius-card);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 /* ---- Buttons ---- */
@@ -212,7 +287,10 @@
   height: 44px;
   padding-inline: var(--space-lg);
   border-radius: var(--radius-card);
-  background: var(--color-accent);
+  /* AA-safe: the mid-luminance `--color-accent` only reaches ~3:1 with the
+     label, so the fill uses the darker `--color-accent-strong` role instead.
+     This is the one shared class behind every primary CTA. */
+  background: var(--color-accent-strong);
   color: var(--color-accent-ink);
   font-weight: 600;
   font-size: var(--text-sm);
@@ -224,7 +302,9 @@
 }
 
 .btn-primary:hover {
-  background: var(--color-accent-strong);
+  /* A touch darker in light mode / lighter in dark mode — either way the
+     label contrast only improves. */
+  background: color-mix(in oklch, var(--color-accent-strong) 88%, var(--color-ink));
 }
 
 .btn-primary:active {
