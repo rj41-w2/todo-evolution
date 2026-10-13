@@ -64,7 +64,7 @@ export default function Home() {
     <div className="space-y-8">
       {/* Page header — functional, not a hero */}
       <section className="space-y-1.5">
-        <h1 className="page-header text-[var(--text-2xl)]">
+        <h1 className="page-header text-[length:var(--text-2xl)]">
           Good to see you, {firstName}.
         </h1>
         <p className="font-mono text-sm text-muted">
