@@ -124,6 +124,41 @@
   color: var(--color-muted);
 }
 
+/* ---- Shell navigation ---- */
+
+.nav-group-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 40px;
+  padding-inline: var(--space-sm);
+  border-radius: var(--radius-input);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    color var(--dur-short) var(--ease-out);
+}
+
+.nav-item:hover {
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.nav-item[aria-current="page"] {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
 .ledger-row {
   display: flex;
   align-items: flex-start;
