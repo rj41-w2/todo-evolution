@@ -25,12 +25,24 @@ export function completionPercent(counts: TaskCounts): number {
 }
 
 /**
+ * A task is overdue when it is **not** `Completed` **and** its due date is
+ * strictly **before today** (i.e. before the start of `now`'s day). A task due
+ * *today* is **not** overdue. Accepts `now` so tests can pin the boundary.
+ */
+export function isOverdue(task: Task, now: Date): boolean {
+  if (task.status === 'Completed') return false;
+  if (task.due_date === null) return false;
+  const due = new Date(task.due_date);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return due < today;
+}
+
+/**
  * How many tasks are overdue: not completed and with a `due_date` strictly in
- * the past. This is the same definition the ledger row uses to tint its due
- * chip, so the dashboard card and the row agree.
+ * the past (before today). This uses the same `isOverdue` predicate the ledger
+ * row uses to tint its due chip, so the dashboard card and the row agree.
  */
 export function countOverdue(tasks: Task[], now: Date): number {
-  return tasks.filter(
-    t => t.status !== 'Completed' && t.due_date !== null && new Date(t.due_date) < now,
-  ).length;
+  return tasks.filter(t => isOverdue(t, now)).length;
 }

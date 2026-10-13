@@ -46,7 +46,7 @@ layer, no unsafe accent pairings), `focus-ring.test.ts`,
 - `components/` — `AppShell`, `AppSidebar`, `SidebarNav`, `SidebarDrawer`,
   `StatusRail`, `TasksProvider`, `OnboardingGate`, `OnboardingView`,
   `DashboardView`, `TaskForm`, `TaskEditForm`,
-  `TaskList`, `TaskRow`, `TaskTabs`, `TaskControls`, `Chatbot`, `ComingSoon`,
+  `TaskList`, `TaskRow`, `TaskTabs`, `Chatbot`, `ComingSoon`,
   `SettingsView`, `ThemeChoice`, `ThemeToggle`, `SignOutButton`.
 - `lib/` — `task-filter`, `task-counts`, `dashboard`, `my-tasks`, `nav`,
   `workspace`, `agent-activity`, `client-now`, `use-focus-trap` (pure, tested)
@@ -70,8 +70,4 @@ read that same state; the dashboard's chatbot mounts only on `/`.
 > design guards live in `app/*.test.ts`. If a defect ships twice, add a guard.
 
 > [!WARNING]
-> **Server/client boundaries.** Only `app/layout.tsx` is a server component.
-> `lib/auth.ts` is server-only (reads `DATABASE_URL` / `BETTER_AUTH_SECRET`);
-> `lib/auth-client.ts` is browser-only. Components without `'use client'`
-> (`Chatbot`, `TaskControls`, `ComingSoon`) rely on being imported from a client
-> parent.
+> **Server/client boundaries.** Server components: `app/layout.tsx`, `app/onboarding/page.tsx`, `app/(app)/layout.tsx`, `app/(app)/page.tsx`, `app/(app)/settings/page.tsx`, `app/(app)/goals/page.tsx`, `app/(app)/team/page.tsx`, `app/(app)/activity/page.tsx`. `lib/auth.ts` is server-only (reads `DATABASE_URL` / `BETTER_AUTH_SECRET`); `lib/auth-client.ts` is browser-only. Components without `'use client'` (`Chatbot`, `ComingSoon`) rely on being imported from a client parent.

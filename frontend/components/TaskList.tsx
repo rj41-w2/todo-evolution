@@ -12,13 +12,15 @@ interface TaskListProps {
   onDeleteTask: (id: string) => Promise<void>;
   /** Passed straight through to each row; omit for a read-only view. */
   onUpdateTask?: (task: Task, patch: TaskUpdate) => Promise<void>;
+  /** Reference clock for overdue computation; tests pin this. */
+  now?: Date;
 }
 
 /**
  * The ledger: open tasks then done tasks, each group counted. Rows are the
  * shared `TaskRow`, so the tasks page and the dashboard read identically.
  */
-export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteTask, onUpdateTask }: TaskListProps) {
+export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteTask, onUpdateTask, now = new Date() }: TaskListProps) {
   const open = tasks.filter(t => t.status !== 'Completed');
   const done = tasks.filter(t => t.status === 'Completed');
 
@@ -48,6 +50,7 @@ export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteT
           onToggleStatus={onToggleStatus}
           onDeleteTask={onDeleteTask}
           onUpdateTask={onUpdateTask}
+          now={now}
         />
       ))}
     </AnimatePresence>

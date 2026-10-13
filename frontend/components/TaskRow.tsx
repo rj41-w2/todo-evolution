@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, Circle, Trash2, Tag, Calendar, Pencil } from 'lucide-react';
 import { Task, TaskUpdate } from '../types';
 import TaskEditForm from './TaskEditForm';
+import { isOverdue } from '../lib/task-counts';
 
 interface TaskRowProps {
   task: Task;
@@ -15,6 +16,8 @@ interface TaskRowProps {
    * in-place editor. Views that share this row get the same editing for free.
    */
   onUpdateTask?: (task: Task, patch: TaskUpdate) => Promise<void>;
+  /** Reference clock for overdue computation; tests pin this. */
+  now?: Date;
 }
 
 const priorityDot: Record<string, string> = {
@@ -37,10 +40,10 @@ function formatDate(iso: string) {
  * When a view hands it `onUpdateTask` the row also edits itself in place, so
  * editing keeps the ledger's density instead of opening a dialog.
  */
-export default function TaskRow({ task, onToggleStatus, onDeleteTask, onUpdateTask }: TaskRowProps) {
+export default function TaskRow({ task, onToggleStatus, onDeleteTask, onUpdateTask, now = new Date() }: TaskRowProps) {
   const [editing, setEditing] = useState(false);
   const isDone = task.status === 'Completed';
-  const overdue = task.due_date && new Date(task.due_date) < new Date() && !isDone;
+  const overdue = isOverdue(task, now);
   const showEditor = editing && !!onUpdateTask;
 
   return (

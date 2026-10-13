@@ -126,12 +126,15 @@ named tokens (`var(--space-md)`), never raw values. Use `gap` for siblings.
 
 One ring, drawn globally. `globals.css` clears the outline for `:focus` (so a
 pointer click shows nothing) and draws `2px solid var(--color-focus)`,
-`outline-offset: 2px` for `:focus-visible`. There is no per-component focus
-styling, and no component may suppress the ring with an `outline-none` /
+`outline-offset: 2px` for `:focus-visible`. The shared `.input` class in
+`globals.css` also carries a `:focus-visible` rule (border + outline colour) so
+text fields show the same ring while keeping their border styling — this is the
+only per-component focus exception and it is defined in the shared sheet, not in
+a page or component. No component may suppress the ring with an `outline-none` /
 `outline-hidden` utility: those land in Tailwind's utilities layer, which
-outranks the rule regardless of specificity, and the control then shows nothing
-at all. Flat controls (the inline quick-add and the in-place row editor) keep the
-same ring as everything else rather than hiding it.
+outranks the base layer regardless of specificity, and the control then shows
+nothing at all. Flat controls (the inline quick-add and the in-place row editor)
+keep the same ring as everything else rather than hiding it.
 
 A date input walks its internal segments as extra Tab stops, and on a segment
 the host matches `:focus-within` but neither `:focus` nor `:focus-visible`. One
@@ -185,10 +188,13 @@ utility, and pins the date-input rule.
 
 ## What pages MAY differ on
 
-- The sidebar contents and the right status rail: dashboard keeps user chip +
-  theme + logout; auth pages show only the wordmark.
+- The right status rail: dashboard keeps the agent activity panel; other app
+  pages may show different rail content or none.
 - The chat button + drawer exist only on the dashboard.
 - Ledger density (row meta on one line on mobile, two on desktop).
+
+The sidebar (identity chip, theme toggle, logout) is mounted by `AppShell` for
+**every** signed-in page — it is not a dashboard-only element.
 
 ## Exports
 

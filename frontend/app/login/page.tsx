@@ -56,12 +56,9 @@ export default function LoginPage() {
           </header>
 
           {error && (
-            <div
-              role="alert"
-              className="mb-5 flex items-start gap-2 p-3.5 rounded-[var(--radius-input)] bg-danger-soft border border-danger/40 text-danger text-sm"
-            >
-              <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
+            <div role="alert" className="alert mb-5">
+              <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+              <span className="text-sm">{error}</span>
             </div>
           )}
 

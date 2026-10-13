@@ -8,6 +8,7 @@ import TaskList from '../../../components/TaskList';
 import TaskTabs from '../../../components/TaskTabs';
 import { useTasks } from '../../../components/TasksProvider';
 import { countByFilter, filterTasks, TaskFilter } from '../../../lib/task-filter';
+import { useClientNow } from '../../../lib/client-now';
 
 /**
  * The all-tasks page. It reads the shared `useTasks` source, so the right status
@@ -17,6 +18,7 @@ import { countByFilter, filterTasks, TaskFilter } from '../../../lib/task-filter
 export default function TasksPage() {
   const { tasks, loading, error, dismissError, createTask, updateTask, toggleTaskStatus, deleteTask } = useTasks();
   const [filter, setFilter] = useState<TaskFilter>('All');
+  const now = useClientNow();
 
   const counts = countByFilter(tasks);
   const visible = filterTasks(tasks, filter);
@@ -64,6 +66,7 @@ export default function TasksPage() {
             onToggleStatus={toggleTaskStatus}
             onDeleteTask={deleteTask}
             onUpdateTask={updateTask}
+            now={now ?? new Date()}
           />
         )}
       </AnimatePresence>

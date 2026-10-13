@@ -9,6 +9,7 @@ import TaskTabs from '../../../components/TaskTabs';
 import { useTasks } from '../../../components/TasksProvider';
 import { countByFilter, filterTasks, TaskFilter } from '../../../lib/task-filter';
 import { DEFAULT_MY_TASKS_FILTER, myTasksEmptyState } from '../../../lib/my-tasks';
+import { useClientNow } from '../../../lib/client-now';
 
 /**
  * The signed-in user's own outstanding work.
@@ -22,6 +23,7 @@ import { DEFAULT_MY_TASKS_FILTER, myTasksEmptyState } from '../../../lib/my-task
 export default function MyTasksPage() {
   const { tasks, loading, error, dismissError, updateTask, toggleTaskStatus, deleteTask } = useTasks();
   const [filter, setFilter] = useState<TaskFilter>(DEFAULT_MY_TASKS_FILTER);
+  const now = useClientNow();
 
   const counts = countByFilter(tasks);
   const visible = filterTasks(tasks, filter);
@@ -84,6 +86,7 @@ export default function MyTasksPage() {
             onToggleStatus={toggleTaskStatus}
             onDeleteTask={deleteTask}
             onUpdateTask={updateTask}
+            now={now ?? new Date()}
           />
         )}
       </AnimatePresence>
