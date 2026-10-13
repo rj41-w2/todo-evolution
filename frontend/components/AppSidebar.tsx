@@ -1,17 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
-import { authClient } from '../lib/auth-client';
 import { ThemeToggle } from './ThemeToggle';
 import { SidebarNav } from './SidebarNav';
+import { SignOutButton } from './SignOutButton';
 import { useTasks } from './TasksProvider';
 
 /**
  * The sidebar contents: wordmark, grouped nav, and the signed-in identity with
  * theme + sign-out. Rendered both in the static sidebar and inside the mobile
  * drawer, so the identity and theme live in the shell rather than on a page.
+ * Sign-out is the same shared control the settings page uses.
  */
 export function AppSidebar({
   onNavigate,
@@ -21,17 +20,6 @@ export function AppSidebar({
   className?: string;
 }) {
   const { user } = useTasks();
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    try {
-      await authClient.signOut();
-      router.push('/login');
-      router.refresh();
-    } catch (error) {
-      console.error('Failed to sign out user:', error);
-    }
-  };
 
   return (
     <div className={`flex-col gap-6 ${className}`}>
@@ -58,16 +46,7 @@ export function AppSidebar({
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {user && (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-[var(--radius-input)] text-xs font-medium text-danger hover:bg-danger-soft transition-colors cursor-pointer"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Log out
-            </button>
-          )}
+          {user && <SignOutButton />}
         </div>
       </div>
     </div>

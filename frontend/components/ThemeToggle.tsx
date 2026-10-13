@@ -6,7 +6,7 @@ import { Sun, Moon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -15,14 +15,18 @@ export function ThemeToggle() {
 
   if (!mounted) return null;
 
+  // Reflect what is actually on screen (so the icon stays truthful when the
+  // "System" choice from settings resolves to dark) and switch to its opposite.
+  const isDark = resolvedTheme === "dark";
+
   return (
     <button
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      onClick={() => setTheme(isDark ? "light" : "dark")}
       className="icon-btn"
       aria-label="Toggle theme"
     >
       <AnimatePresence mode="wait" initial={false}>
-        {theme === "dark" ? (
+        {isDark ? (
           <motion.div
             key="sun"
             initial={{ scale: 0.5, opacity: 0, rotate: 90 }}
