@@ -46,7 +46,7 @@ export function OnboardingView() {
 
         <div className="bg-card border border-rule rounded-[var(--radius-panel)] shadow-card p-6 sm:p-8">
           <header className="space-y-1.5 mb-6">
-            <h1 className="page-header text-[var(--text-2xl)]">Name your workspace.</h1>
+            <h1 className="page-header text-[length:var(--text-2xl)]">Name your workspace.</h1>
             <p className="text-sm text-muted">
               It becomes the label at the top of your sidebar.
             </p>
