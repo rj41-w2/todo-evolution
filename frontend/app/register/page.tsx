@@ -43,90 +43,103 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm space-y-8">
-        <div className="text-center">
+    <div className="min-h-dvh flex flex-col items-center justify-center bg-paper px-4 py-12">
+      <main className="w-full max-w-sm">
+        <div className="text-center mb-6">
           <p className="wordmark inline-block">
-            EVO<span className="text-accent">TODO</span>
+            EVO<span className="text-accent-strong">TODO</span>
           </p>
         </div>
 
-        <header className="text-center space-y-1.5">
-          <h1 className="page-header text-[var(--text-3xl)]">Create your account.</h1>
-          <p className="text-sm text-muted">Start tracking tasks in a couple of minutes.</p>
-        </header>
+        <div className="bg-card border border-rule rounded-[var(--radius-panel)] shadow-card p-6 sm:p-8">
+          <header className="space-y-1.5 mb-6">
+            <h1 className="page-header text-[var(--text-2xl)]">Create your account.</h1>
+            <p className="text-sm text-muted">Start tracking tasks in a couple of minutes.</p>
+          </header>
 
-        {error && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 p-3.5 rounded-[var(--radius-input)] bg-danger-soft border border-danger-soft text-danger text-sm"
-          >
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
+          {error && (
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-2 p-3.5 rounded-[var(--radius-input)] bg-danger-soft border border-danger/40 text-danger text-sm"
+            >
+              <AlertCircle aria-hidden="true" className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleRegister} className="space-y-5">
-          <div>
-            <label htmlFor="name" className="field-label">Full name</label>
-            <input
-              id="name"
-              type="text"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
-              className="input"
-              required
-            />
-          </div>
+          <form onSubmit={handleRegister} className="space-y-5">
+            <div>
+              <label htmlFor="name" className="field-label">Full name</label>
+              <input
+                id="name"
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your name"
+                className="input"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="email" className="field-label">Email address</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="input"
-              required
-            />
-          </div>
+            <div>
+              <label htmlFor="email" className="field-label">Email address</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="input"
+                required
+              />
+            </div>
 
-          <div>
-            <label htmlFor="password" className="field-label">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input"
-              required
-            />
-          </div>
+            <div>
+              <label htmlFor="password" className="field-label">Password</label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                required
+              />
+            </div>
 
-          <button type="submit" disabled={loading} className="btn-primary w-full">
-            {loading ? (
-              <span className="h-4 w-4 border-2 border-rule-2 border-t-accent-ink rounded-full animate-spin" />
-            ) : (
-              <>
-                Create account
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              aria-busy={loading}
+              className="btn-primary w-full"
+            >
+              {loading ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 border-2 border-accent-ink/30 border-t-accent-ink rounded-full animate-spin"
+                  />
+                  Creating account…
+                </>
+              ) : (
+                <>
+                  Create account
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </form>
 
-        <p className="text-center text-sm text-muted pt-4 border-t border-rule">
-          Already have an account?{' '}
-          <Link href="/login" className="text-accent font-medium hover:underline">
-            Sign in
-          </Link>
-        </p>
-      </div>
+          <p className="text-center text-sm text-muted mt-6 pt-6 border-t border-rule">
+            Already have an account?{' '}
+            <Link href="/login" className="text-accent-strong font-medium hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </main>
     </div>
   );
 }
