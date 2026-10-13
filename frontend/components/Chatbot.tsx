@@ -205,7 +205,7 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
             {/* Chat Drawer Header */}
             <div className="flex justify-between items-center px-4 py-3 border-b border-rule">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 bg-accent-soft text-accent rounded-[var(--radius-input)] flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 bg-accent-soft text-accent-strong rounded-[var(--radius-input)] flex items-center justify-center shrink-0">
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div className="text-left leading-tight">
@@ -237,7 +237,7 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center space-y-4 px-6">
-                  <div className="w-12 h-12 bg-accent-soft text-accent rounded-[var(--radius-card)] flex items-center justify-center">
+                  <div className="w-12 h-12 bg-accent-soft text-accent-strong rounded-[var(--radius-card)] flex items-center justify-center">
                     <Sparkles className="h-6 w-6" />
                   </div>
                   <div className="space-y-1">
@@ -269,7 +269,7 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
                   >
                     <div
                       className={`max-w-[85%] px-3.5 py-2.5 rounded-[var(--radius-card)] text-sm leading-relaxed ${msg.role === 'user'
-                        ? 'bg-accent text-accent-ink rounded-br-sm'
+                        ? 'accent-fill rounded-br-sm'
                         : 'bg-paper-2 border border-rule text-ink rounded-bl-sm'
                         }`}
                     >
@@ -326,7 +326,7 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
                 type="submit"
                 disabled={!inputValue.trim() || isLoading}
                 aria-label="Send message"
-                className="h-11 w-11 shrink-0 rounded-[var(--radius-input)] bg-accent text-accent-ink flex items-center justify-center transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="h-11 w-11 shrink-0 rounded-[var(--radius-input)] accent-fill flex items-center justify-center transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

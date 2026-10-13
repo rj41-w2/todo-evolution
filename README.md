@@ -31,7 +31,7 @@ A full-stack, AI-powered task management platform built as an evolutionary softw
 - **Authentication** -- Email/password signup and login with Better Auth and EdDSA JWTs
 - **Multi-tenant** -- All API routes enforce per-user data isolation
 - **AI Chatbot** -- Natural language task management through Gemini 2.5 Flash, using MCP tool calls to perform actions
-- **Dark/Light Theme** -- System-aware theme toggle with Framer Motion transitions
+- **Warm-light design system** -- A single token layer (`frontend/app/tokens.css`) behind a floating-sidebar shell; warm light is the default and dark mode is retained and switchable (light / dark / system)
 - **Dockerized** -- Multi-stage builds for both services, orchestrated with Docker Compose
 
 ## Tech Stack
@@ -75,6 +75,31 @@ todo-evolution/
 ├── TODO.md                 # Original roadmap & notes
 └── README.md
 ```
+
+## Design System
+
+The design contract lives in [`design.md`](design.md); the values live in
+`frontend/app/tokens.css`. Both are the single source of truth -- pages consume
+tokens, never raw colours.
+
+- **Warm canvas.** Light is the default (`#EBE7E2` canvas, `#FFFAF4` card, warm
+  tan hairlines) with a single violet accent reserved for the wordmark slice,
+  primary CTAs, the completion toggle and focus rings.
+- **Dark is retained.** `tokens.css` overrides every colour and elevation token
+  under `.dark`; only lightness and chroma move between modes, never hue. The
+  shell toggle and the settings Light / Dark / System choice drive the same
+  `next-themes` state.
+- **Type.** DM Sans only, weights 300-600, across the display, body and mono
+  registers.
+- **Layout.** A 240 px floating sidebar (a drawer below `lg`), a raised main
+  content card and a right status rail on every signed-in page; login, register
+  and first-run use a centred focused column.
+
+The contract's rules are enforced by tests in `frontend/app/`:
+`tokens.test.ts` (WCAG AA contrast in both modes and no raw colour literals
+outside the token layer) and `focus-ring.test.ts` (no control may suppress the
+global `:focus-visible` ring). `heading-utility.test.ts` pins the Tailwind v4
+`text-[length:var(--...)]` requirement.
 
 ## Getting Started
 
@@ -142,13 +167,16 @@ python main.py
 python -m unittest discover -s tests -v
 ```
 
-CI also runs frontend lint and type checking:
+CI also runs the frontend checks, in order:
 
 ```bash
 cd frontend
 npm run lint
 npx tsc --noEmit
+npm test          # vitest
 ```
+
+`npm run build` is not part of CI; the Docker frontend image runs it.
 
 ## Roadmap
 

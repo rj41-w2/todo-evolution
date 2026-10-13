@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EVO TODO — frontend
 
-## Getting Started
+The Phase II web client: **Next.js 16** (App Router) · React 19 · TypeScript
+strict · Tailwind v4 · Better Auth · Framer Motion · lucide-react.
 
-First, run the development server:
+## Commands
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # http://localhost:3000
+npm test             # vitest (jsdom)
+npm run lint         # eslint (flat config)
+npx tsc --noEmit     # typecheck — CI runs lint, tsc, then npm test
+npm run build        # next build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` is not committed. It holds `DATABASE_URL` and
+`BETTER_AUTH_SECRET` (Better Auth), plus `INTERNAL_BACKEND_URL` for the
+`/api/backend/*` rewrite in `next.config.ts`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Routes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Inside the signed-in route group `app/(app)/` (shared shell + onboarding gate):
+`/` dashboard · `/tasks` · `/my-tasks` · `/goals` · `/team` · `/activity` ·
+`/settings`. Outside it: `/login`, `/register`, `/onboarding` (focused column)
+and `/api/auth/[...all]` (Better Auth handler).
 
-## Learn More
+Goals, Team and Activity are honest "coming soon" placeholders — the backend has
+no data model for them, so nothing is faked (see `../../design.md` and the
+feature spec).
 
-To learn more about Next.js, take a look at the following resources:
+`proxy.ts` (Next 16's replacement for `middleware.ts`) redirects visitors
+without a session cookie to `/login`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `components/AppShell.tsx` — the signed-in chrome: floating sidebar (a drawer
+  below `lg`), main content card, right status rail, wrapped in `TasksProvider`.
+- `components/TasksProvider.tsx` — the one task source: optimistic
+  create/toggle/delete with rollback, shared by every page and the status rail.
+- `lib/` — pure logic with unit tests (`task-filter`, `task-counts`,
+  `dashboard`, `my-tasks`, `nav`, `workspace`, `agent-activity`) next to the I/O
+  helpers (`api.ts` `secureFetch`, `auth-client.ts`).
+- `lib/workspace.ts` — the first-run flag and workspace name, kept in
+  localStorage and deliberately failure-tolerant: blocked storage reads as
+  "already onboarded" so the onboarding gate can never loop.
 
-## Deploy on Vercel
+## Design system
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The contract is [`../design.md`](../design.md); the values are
+`app/tokens.css`; `app/globals.css` maps them into Tailwind via `@theme inline`
+and defines the shared component classes (`.wordmark`, `.btn-primary`,
+`.accent-fill`, `.input`, `.chip`, `.nav-item`, …).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Warm **light** is the default; dark is retained (`.dark` in `tokens.css`) and
+  switchable from the shell toggle and settings.
+- Accent rules: `--color-accent` is decorative/graphic only; text and
+  label-bearing fills use `--color-accent-strong` via the shared classes.
+- Never suppress the focus ring with `outline-none` / `outline-hidden` — it
+  outranks the global `:focus-visible` rule and erases the ring.
+- Tailwind v4 cannot infer the type of a bare `var()`, so a font-size token is
+  written with an explicit `length:` hint (`text-[length:var(--text-2xl)]`),
+  never the untyped form — which silently leaves the element with no font-size.
+
+Design guards live in `app/`: `tokens.test.ts`, `focus-ring.test.ts`,
+`heading-utility.test.ts`.
+
+See `AGENTS.md` (and `../AGENTS.md`) before changing anything in `app/`.

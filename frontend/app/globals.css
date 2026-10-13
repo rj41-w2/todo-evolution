@@ -66,11 +66,28 @@
     color: var(--color-ink);
   }
 
+  /* The ring is the only focus affordance: `:focus` clears it for pointer
+     clicks, `:focus-visible` draws it for keyboard users. A Tailwind
+     `outline-none` / `outline-hidden` utility would outrank both (utilities
+     beat the base layer), so nothing in the app may carry one —
+     `frontend/app/focus-ring.test.ts` pins that. */
   :focus {
     outline: none;
   }
 
   :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+
+  /* A date input walks its internal (shadow) segments as separate Tab stops.
+     Once focus is on a segment the host matches `:focus-within` but neither
+     `:focus` nor `:focus-visible`, so the ring above never draws and the field
+     reads as unfocused half-way through the Tab order. Draw the same ring for
+     that state alone: `:not(:focus)` keeps it off a plain pointer click on the
+     control, which the rule above already clears. */
+  input[type="date"]:focus-within:not(:focus) {
     outline: 2px solid var(--color-focus);
     outline-offset: 2px;
     border-radius: inherit;
@@ -87,12 +104,12 @@
   line-height: 1;
 }
 
-.top-rail {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky, 200);
-  background: var(--color-paper);
-  border-bottom: 1px solid var(--color-rule);
+/* The "TODO" slice. It is text, so it uses the AA-safe accent role — never the
+   decorative `--color-accent`, which only reaches ~3:1 on canvas. Defined here
+   because the wordmark is shared by the shell, the drawer and all three
+   auth/first-run pages; see the accent contrast rule in design.md. */
+.wordmark--accent {
+  color: var(--color-accent-strong);
 }
 
 .page-header {
@@ -275,6 +292,18 @@
   border-radius: var(--radius-card);
   background: var(--color-danger-soft);
   color: var(--color-danger);
+}
+
+/* ---- Accent fill (a label sits on top) ---- */
+
+/* The measured violet `--color-accent` is mid-luminance: ~3:1 against
+   `--color-accent-ink`, which is fine for a graphic but fails AA for a label.
+   Every accent fill that carries text therefore goes through this one class,
+   which pairs the AA-safe `-strong` role with the accent-ink label —
+   `frontend/app/tokens.test.ts` pins the contrast and forbids the unsafe pair. */
+.accent-fill {
+  background: var(--color-accent-strong);
+  color: var(--color-accent-ink);
 }
 
 /* ---- Buttons ---- */

@@ -47,7 +47,7 @@ export default function RegisterPage() {
       <main className="w-full max-w-sm">
         <div className="text-center mb-6">
           <p className="wordmark inline-block">
-            EVO<span className="text-accent-strong">TODO</span>
+            EVO<span className="wordmark--accent">TODO</span>
           </p>
         </div>
 

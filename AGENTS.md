@@ -29,7 +29,7 @@ npm test                                         # vitest (CI runs after lint + 
 npm run build
 ```
 
-`frontend/README.md` and `GEMINI.md` are stale (backed Next.js/CRA-style boilerplate). Trust `package.json`/CI above them.
+`frontend/README.md` and `frontend/GEMINI.md` describe the frontend as shipped (warm-canvas design system, routes, commands); `package.json`/CI are still the authority for scripts.
 
 ## Backend (src/backend)
 
@@ -43,6 +43,11 @@ npm run build
 - **Read `frontend/AGENTS.md`**: this Next.js has breaking changes vs. older versions; consult `node_modules/next/dist/docs/` before writing code.
 - **Auth**: Better Auth (`lib/auth.ts`) with email/password + JWT plugin. `frontend/proxy.ts` middleware redirects unauthenticated users to `/login`.
 - **Backend calls**: client uses `secureFetch` (`lib/api.ts`) which injects the JWT Bearer token. API base is `/api/backend/...` on the client (rewritten in `next.config.ts`) and `INTERNAL_BACKEND_URL` server-side — don't hardcode the backend origin in components.
+- **Design contract**: `design.md` (repo root) is locked and supersedes the old cold-indigo "quiet workbench" system (top rail, Inter/Space Grotesk/JetBrains Mono, no sidebar) — that system is gone from code and docs; don't reintroduce it. `frontend/app/tokens.css` is the single source of truth for values; extend `@theme inline` in `globals.css` too when adding a token.
+- **Warm light is the default** (`next-themes` `defaultTheme="light"`); `.dark` in `tokens.css` overrides every colour + elevation token and is retained/switchable via the shell toggle and settings (Light / Dark / System).
+- **Accent roles**: `--color-accent` is decorative/graphic only; accent *text* (including the "TODO" slice of the wordmark) uses `--color-accent-strong` — shared classes `.wordmark--accent` and `.accent-fill`, never per page.
+- **Focus ring**: one global `:focus-visible` rule in `globals.css`. Never add `outline-none`/`outline-hidden` utilities — they outrank it via Tailwind's utilities layer and erase the ring. Guarded by `app/focus-ring.test.ts`.
+- **Frontend tests**: `npm test` (vitest + jsdom, `vitest.config.mts`). `app/*.test.ts` hold the source-level design guards; `components/`/`lib/` tests cover behaviour. Prefer adding a guard test when a defect has shipped twice.
 
 ## Keep in sync when adding/enhancing a field
 

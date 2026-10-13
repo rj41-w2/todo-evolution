@@ -13,6 +13,13 @@ Light is the default and it is **warm**. Dark mode is retained and switchable.
 The token layer (`frontend/app/tokens.css`) is the single source of truth — this
 document explains the system, it does not restate raw values.
 
+As shipped: `next-themes` runs with `attribute="class"` and
+`defaultTheme="light"`, so a first visit is warm-light regardless of the OS
+preference; the `.dark` block in `tokens.css` is the whole dark theme. The shell
+carries a toggle (sidebar and narrow-viewport header) and settings offers
+Light / Dark / System — "System" is the only path to a machine-following theme,
+and it stays switchable back.
+
 ## Genre
 
 modern-minimal — a task tool is a utility, executed on a soft warm canvas:
@@ -70,8 +77,15 @@ only ~3.0:1, which is fine for a **graphic** (dot, pill, border, focus ring —
   `--color-accent-ink` (≥4.5:1);
 - `--color-accent` is decorative/graphic only.
 
+Both pairings are shared classes, not per-page choices: the wordmark slice is
+`.wordmark--accent`, and any accent fill with text on it is `.accent-fill`
+(accent-strong fill + accent-ink label). A glyph on `--color-accent-soft` uses
+`--color-accent-strong` for the same reason.
+
 `frontend/app/tokens.test.ts` computes WCAG contrast from the token values for
-both modes and fails if any guarantee above is broken.
+both modes, fails if any guarantee above is broken, and fails if markup pairs
+the decorative `bg-accent` with a `text-accent-ink` label (or `bg-accent-soft`
+with a `text-accent` glyph) inline instead of going through those classes.
 
 ### Mode rule
 
@@ -108,6 +122,27 @@ named tokens (`var(--space-md)`), never raw values. Use `gap` for siblings.
 - Reduced-motion fallback: opacity-only crossfade, ≤ 150 ms, for every
   transition.
 
+## Focus
+
+One ring, drawn globally. `globals.css` clears the outline for `:focus` (so a
+pointer click shows nothing) and draws `2px solid var(--color-focus)`,
+`outline-offset: 2px` for `:focus-visible`. There is no per-component focus
+styling, and no component may suppress the ring with an `outline-none` /
+`outline-hidden` utility: those land in Tailwind's utilities layer, which
+outranks the rule regardless of specificity, and the control then shows nothing
+at all. Flat controls (the inline quick-add and the in-place row editor) keep the
+same ring as everything else rather than hiding it.
+
+A date input walks its internal segments as extra Tab stops, and on a segment
+the host matches `:focus-within` but neither `:focus` nor `:focus-visible`. One
+more global rule (`input[type="date"]:focus-within:not(:focus)`) draws the same
+ring for that state, so the field does not read as unfocused part-way through
+the Tab order; `:not(:focus)` keeps it off a plain pointer click. It is still a
+single shared rule — no page or component carries its own focus styling.
+
+`frontend/app/focus-ring.test.ts` fails if any source file carries such a
+utility, and pins the date-input rule.
+
 ## Microinteractions stance
 
 - Silent success. Completion toggle morphs circle → check. No success toasts.
@@ -122,7 +157,8 @@ named tokens (`var(--space-md)`), never raw values. Use `gap` for siblings.
 
 - Primary CTA: accent fill, text `--color-accent-ink`, radius `--radius-card`,
   weight 600, press = translateY(1px). Fills whose label sits on top use
-  `--color-accent-strong` so the label meets AA. "Add task", "Sign in",
+  `--color-accent-strong` so the label meets AA; that pairing is the shared
+  `.accent-fill` class. "Add task", "Sign in",
   "Create account".
 - Secondary: ghost — ink text, hover `--color-paper-2`, hairline border.
 - Danger: text `--color-danger`, ghost hover tint. Never a filled red button.
@@ -137,7 +173,7 @@ named tokens (`var(--space-md)`), never raw values. Use `gap` for siblings.
 ## What pages MUST share
 
 - The wordmark "EVO TODO" (DM Sans 600; EVO in ink, TODO in
-  `--color-accent-strong`).
+  `--color-accent-strong` — the shared `.wordmark--accent` class).
 - The accent colour and its placement: the "TODO" wordmark slice, primary CTA
   fills, the completion toggle, focus rings — ≤ 5 % per viewport. Accent *text*
   uses `--color-accent-strong`; `--color-accent` is graphic/fill only.

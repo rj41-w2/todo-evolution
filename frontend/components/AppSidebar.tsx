@@ -28,7 +28,7 @@ export function AppSidebar({
     <div className={`flex-col gap-6 ${className}`}>
       <div className="px-2 py-1">
         <Link href="/" className="wordmark block" onClick={onNavigate}>
-          EVO<span className="text-accent">TODO</span>
+          EVO<span className="wordmark--accent">TODO</span>
         </Link>
         {workspaceName && (
           <p className="mt-0.5 truncate text-meta text-muted" title={workspaceName}>

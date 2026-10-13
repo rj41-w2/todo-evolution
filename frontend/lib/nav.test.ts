@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import { NAV_GROUPS, isActiveNavItem } from './nav'
 
@@ -12,6 +15,20 @@ describe('navigation model', () => {
       '/settings',
     ])
     expect(NAV_GROUPS.flatMap(g => g.items).find(i => i.href === '/tasks')?.label).toBe('Tasks')
+  })
+
+  // Ticket 02 pointed the sidebar at destinations that did not exist yet. Every
+  // one of them now has a route, and this keeps the model and the route tree
+  // from drifting apart again: a nav entry whose page is missing is a 404 in
+  // the primary navigation.
+  test('every destination resolves to a page in the signed-in route group', () => {
+    const routes = join(dirname(fileURLToPath(import.meta.url)), '..', 'app', '(app)')
+
+    const missing = NAV_GROUPS.flatMap(g => g.items)
+      .map(i => i.href)
+      .filter(href => !existsSync(join(routes, href === '/' ? '' : href.slice(1), 'page.tsx')))
+
+    expect(missing, `no page for: ${missing.join(', ')}`).toEqual([])
   })
 })
 

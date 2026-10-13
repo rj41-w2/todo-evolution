@@ -38,7 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Menu className="h-5 w-5" />
           </button>
           <Link href="/" className="wordmark">
-            EVO<span className="text-accent">TODO</span>
+            EVO<span className="wordmark--accent">TODO</span>
           </Link>
           <ThemeToggle />
         </header>

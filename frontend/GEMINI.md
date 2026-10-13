@@ -1,87 +1,77 @@
-# 🌐 EVO-TODO: Frontend Developer Guide (Next.js)
+# EVO TODO — frontend guide (Next.js 16)
 
-Welcome to the **EVO-TODO Frontend** documentation. This client is a modern, responsive, and visually stunning web application built on **Next.js 15 (App Router)**, **TypeScript**, **Tailwind CSS**, and **Framer Motion** for state-of-the-art cinematic transitions and micro-animations.
+The client is a **Next.js 16 App Router** app in TypeScript, styled with
+**Tailwind v4** on a warm-canvas token layer, animated with **Framer Motion**
+(only where the contract allows it) and authenticated with **Better Auth**.
 
----
+This file is the orientation guide; [`../design.md`](../design.md) is the locked
+design contract and [`README.md`](README.md) has the commands and route map.
 
-## 🎨 Design System & Visual Aesthetics
+## Design system
 
-The UI implements a **premium dark-mode-first glassmorphic system** featuring:
-1.  **Cinematic Ambient Backgrounds:** Floating, blurred HSL color accents (`bg-indigo-500/10`, `bg-blue-500/10`) with keyframe float cycles (`animate-float`).
-2.  **Glassmorphism Layers:** Translucent panels (`glass` utility) utilizing backdrop-blur filters for depth.
-3.  **Modern Typography:** Elegant italicized uppercase headings and high-contrast letter-spacing.
-4.  **Micro-animations:** Interactive form focuses, smooth checkbox scales, list exit/entry transitions (`AnimatePresence` with custom spring presets).
+The shipped system is the **warm canvas**, not the older dark-first
+glassmorphic look: no ambient blobs, no `glass`/backdrop-blur utilities, no
+indigo/blue accents. Light is the default and warm; dark mode is retained and
+switchable.
 
----
+- `app/tokens.css` — every colour, type, space, motion, radius, elevation and
+  glyph value, for `:root` (light) and `.dark`. The single source of truth.
+- `app/globals.css` — `@import "tailwindcss"` + the tokens, the `@theme inline`
+  map that makes each token usable as a Tailwind utility (`bg-card`,
+  `text-ink-2`, `border-rule`, `rounded-[var(--radius-card)]`, …), the base
+  layers, and the shared component classes.
+- Shared classes, not per-page styling: `.wordmark` / `.wordmark--accent`,
+  `.page-header`, `.section-head*`, `.nav-item`, `.ledger-row`, `.task-title*`,
+  `.chip`, `.pill*`, `.tab*`, `.alert`, `.btn-primary`, `.btn-ghost`,
+  `.icon-btn(-danger)`, `.field-label`, `.input`, `.select-input`,
+  `.accent-fill`.
+- Accent rules: `--color-accent` is decorative/graphic only (~3:1 on canvas).
+  Accent **text** uses `--color-accent-strong`; an accent fill that carries a
+  label is `.accent-fill` (accent-strong + `--color-accent-ink`).
+- Focus: one global `:focus-visible` ring. Never add `outline-none` /
+  `outline-hidden` — those utilities outrank the base layer and erase the ring.
 
-## 📂 Frontend File Architecture
+Design rules that have already regressed once are pinned by tests in `app/`:
+`tokens.test.ts` (contrast in both modes, no raw colours outside the token
+layer, no unsafe accent pairings), `focus-ring.test.ts`,
+`heading-utility.test.ts` (`text-[length:var(--text-…)]`).
 
-*   `app/`:
-    *   `layout.tsx`: Sets up global viewport, html attributes, and links global styles.
-    *   `page.tsx`: Primary parent view controller containing data-fetching loops (`fetchTasks`), state management hooks, loading indicator wrappers, and responsive layouts.
-    *   `globals.css`: Core stylesheet declaring HSL styling tokens, variables, cinematic overlays, `@keyframes`, custom scrollbars, and tailwind extensions.
-*   `components/`:
-    *   `TaskForm.tsx`: Interactive form block for creating tasks (inputs for title, description, priority select, tags). Communicates with backend endpoints.
-    *   `TaskList.tsx`: Interactive grid rendering tasks using Framer Motion. Handles completion toggle logic and deletions.
-    *   `ThemeToggle.tsx`: A stylish button component to toggle between `.dark` and root themes.
-*   `types/index.ts`: Defines strong TypeScript types (`Task`, `TaskCreate`, `TaskUpdate`) mapping to the backend JSON structures.
+## File architecture
 
----
+- `app/(app)/` — the signed-in route group: `layout.tsx` mounts
+  `OnboardingGate` + `AppShell`; one `page.tsx` per destination.
+- `app/login`, `app/register`, `app/onboarding` — standalone focused-column
+  pages outside the shell.
+- `app/api/auth/[...all]/route.ts` — the Better Auth handler.
+- `components/` — `AppShell`, `AppSidebar`, `SidebarNav`, `SidebarDrawer`,
+  `StatusRail`, `TasksProvider`, `OnboardingGate`, `OnboardingView`,
+  `DashboardView`, `TaskForm`, `TaskEditForm`,
+  `TaskList`, `TaskRow`, `TaskTabs`, `TaskControls`, `Chatbot`, `ComingSoon`,
+  `SettingsView`, `ThemeChoice`, `ThemeToggle`, `SignOutButton`.
+- `lib/` — `task-filter`, `task-counts`, `dashboard`, `my-tasks`, `nav`,
+  `workspace`, `agent-activity`, `client-now`, `use-focus-trap` (pure, tested)
+  and `api`, `auth-client`, `config`, `auth` (I/O).
 
-## 🔄 State & Data Flow Pipeline
+Data flow, one source: `TasksProvider` fetches through `secureFetch` (which
+injects the Better Auth JWT) and owns optimistic create / toggle / delete with
+rollback. Every page, the status rail and the chatbot's post-tool-call refresh
+read that same state; the dashboard's chatbot mounts only on `/`.
 
-The application follows a clean, single-source-of-truth unidirectional data flow pattern:
-
-```mermaid
-sequenceDiagram
-    participant Home as app/page.tsx (State Owner)
-    participant TF as components/TaskForm.tsx
-    participant TL as components/TaskList.tsx
-    participant API as FastAPI Backend
-
-    Home->>API: GET /api/tasks (Initial Fetch)
-    API-->>Home: List of tasks (SetState)
-    Home->>TL: Pass tasks state & fetchTasks callback
-    Home->>TF: Pass fetchTasks callback
-    TF->>API: POST /api/tasks (Create Task)
-    API-->>TF: Success (201 Created)
-    TF->>Home: Trigger fetchTasks() callback
-    TL->>API: PUT /api/tasks/{id} (Toggle Completion)
-    API-->>TL: Success (200 OK)
-    TL->>Home: Trigger fetchTasks() callback
-```
-
----
-
-## 🏃‍♂️ Setup & Local Execution
-
-1.  **Navigate to frontend root:**
-    ```bash
-    cd frontend
-    ```
-2.  **Install node dependencies:**
-    ```bash
-    npm install
-    ```
-3.  **Run Development Server:**
-    ```bash
-    npm run dev
-    ```
-4.  **Access App dashboard:**
-    Open [http://localhost:3000](http://localhost:3000) inside your web browser.
-
----
-
-## 🤖 Frontend Guidelines for AI Coding Assistants (Gemini)
+## Guidelines
 
 > [!IMPORTANT]
-> **Maintain Cinematic Styling:**
-> Avoid vanilla styling or standard Tailwind colors. Use custom classes defined in `globals.css` (e.g. `glass`, `cinematic-bg`, and `animate-float`) to keep a premium aesthetic look.
+> **Use the token layer.** Consume tokens and the shared classes above; do not
+> introduce a raw colour, a second font family, glass/glow, or a per-page focus
+> style. New values go into `tokens.css` first, then `@theme inline`.
 
 > [!TIP]
-> **Use Framer Motion with AnimatePresence:**
-> When sorting, adding, or deleting cards in the list, wrap elements inside `<motion.div>` with unique `layout` prop attributes. This ensures beautiful layout animations during layout reflow.
+> **Keep the tests honest.** Behavioural tests live next to the module
+> (`lib/*.test.ts`, `components/*.test.tsx`, `app/*.test.tsx`); source-level
+> design guards live in `app/*.test.ts`. If a defect ships twice, add a guard.
 
 > [!WARNING]
-> **React Hook Rules:**
-> Ensure `use client` is kept at the top of client pages. Use `useCallback` on API fetching functions like `fetchTasks` to prevent unnecessary re-render triggers inside `useEffect` hook dependencies.
+> **Server/client boundaries.** Only `app/layout.tsx` is a server component.
+> `lib/auth.ts` is server-only (reads `DATABASE_URL` / `BETTER_AUTH_SECRET`);
+> `lib/auth-client.ts` is browser-only. Components without `'use client'`
+> (`Chatbot`, `TaskControls`, `ComingSoon`) rely on being imported from a client
+> parent.

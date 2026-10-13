@@ -50,7 +50,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           aria-label="Task title"
-          className="w-full bg-transparent text-md font-medium placeholder:text-muted focus:outline-none text-ink"
+          className="w-full bg-transparent text-md font-medium placeholder:text-muted text-ink"
           required
         />
 
@@ -59,7 +59,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           aria-label="Task description"
-          className="w-full bg-transparent text-sm text-ink-2 placeholder:text-muted focus:outline-none resize-none"
+          className="w-full bg-transparent text-sm text-ink-2 placeholder:text-muted resize-none"
           rows={2}
         />
 
@@ -69,7 +69,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value as Priority)}
-              className="select-input bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
+              className="select-input bg-transparent border-none p-0 text-meta text-ink cursor-pointer"
             >
               <option value="Low" className="bg-paper text-ink">Low</option>
               <option value="Medium" className="bg-paper text-ink">Medium</option>
@@ -85,7 +85,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               aria-label="Tags, comma separated"
-              className="bg-transparent border-none p-0 text-meta w-28 placeholder:text-muted focus:outline-none"
+              className="bg-transparent border-none p-0 text-meta w-28 placeholder:text-muted"
             />
           </label>
 
@@ -96,7 +96,7 @@ export default function TaskForm({ onTaskCreated }: TaskFormProps) {
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               aria-label="Due date"
-              className="bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
+              className="bg-transparent border-none p-0 text-meta text-ink cursor-pointer"
             />
           </label>
 

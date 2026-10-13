@@ -70,7 +70,7 @@ export default function TaskEditForm({ task, onSave, onClose }: TaskEditFormProp
         aria-label="Title"
         autoFocus
         required
-        className="w-full bg-transparent text-md font-medium text-ink placeholder:text-muted focus:outline-none"
+        className="w-full bg-transparent text-md font-medium text-ink placeholder:text-muted"
       />
 
       <textarea
@@ -79,7 +79,7 @@ export default function TaskEditForm({ task, onSave, onClose }: TaskEditFormProp
         aria-label="Description"
         placeholder="Add a description…"
         rows={2}
-        className="w-full bg-transparent text-sm text-ink-2 placeholder:text-muted focus:outline-none resize-none"
+        className="w-full bg-transparent text-sm text-ink-2 placeholder:text-muted resize-none"
       />
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-3 border-t border-rule">
@@ -89,7 +89,7 @@ export default function TaskEditForm({ task, onSave, onClose }: TaskEditFormProp
             value={priority}
             onChange={(e) => setPriority(e.target.value as Priority)}
             aria-label="Priority"
-            className="select-input bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
+            className="select-input bg-transparent border-none p-0 text-meta text-ink cursor-pointer"
           >
             <option value="Low" className="bg-paper text-ink">Low</option>
             <option value="Medium" className="bg-paper text-ink">Medium</option>
@@ -105,7 +105,7 @@ export default function TaskEditForm({ task, onSave, onClose }: TaskEditFormProp
             onChange={(e) => setTags(e.target.value)}
             aria-label="Tags"
             placeholder="Tags"
-            className="bg-transparent border-none p-0 text-meta w-28 text-ink placeholder:text-muted focus:outline-none"
+            className="bg-transparent border-none p-0 text-meta w-28 text-ink placeholder:text-muted"
           />
         </label>
 
@@ -116,7 +116,7 @@ export default function TaskEditForm({ task, onSave, onClose }: TaskEditFormProp
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             aria-label="Due date"
-            className="bg-transparent border-none p-0 text-meta text-ink cursor-pointer focus:outline-none"
+            className="bg-transparent border-none p-0 text-meta text-ink cursor-pointer"
           />
         </label>
 

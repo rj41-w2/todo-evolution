@@ -185,6 +185,48 @@ describe('primary CTA contrast (the shared class behind every page)', () => {
   })
 })
 
+describe('accent pairings', () => {
+  // The decorative violet only reaches ~3:1 against `--color-accent-ink`, which
+  // fails AA for a label, and only ~2:1 against `--color-accent-soft`, which
+  // fails even the 3:1 bar for a meaningful glyph. Every accent fill with text
+  // on it therefore goes through the shared `.accent-fill` class (accent-strong
+  // fill + accent-ink label), and a glyph on `--color-accent-soft` uses the
+  // `-strong` text role — the pairing the sidebar and settings avatars already
+  // use. A bare `bg-accent` next to `text-accent-ink`, or `bg-accent-soft` next
+  // to `text-accent`, is the defect.
+  function inlinePairs(a: string, b: string): string[] {
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, entry.name)
+        if (entry.isDirectory()) walk(p)
+        else if (/\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')) {
+          readFileSync(p, 'utf8')
+            .split('\n')
+            .forEach((line, index) => {
+              if (new RegExp(`\\b${a}(?![\\w-])`).test(line) && new RegExp(`\\b${b}(?![\\w-])`).test(line)) {
+                offenders.push(`${p.replace(`${frontend}/`, '')}:${index + 1}`)
+              }
+            })
+        }
+      }
+    }
+    walk(join(frontend, 'components'))
+    walk(join(frontend, 'app'))
+    return offenders
+  }
+
+  test('never pairs the decorative fill with an accent-ink label inline', () => {
+    const offenders = inlinePairs('bg-accent', 'text-accent-ink')
+    expect(offenders, `use the shared .accent-fill class: ${offenders.join(', ')}`).toEqual([])
+  })
+
+  test('never puts an accent glyph on the soft accent surface inline', () => {
+    const offenders = inlinePairs('bg-accent-soft', 'text-accent')
+    expect(offenders, `use text-accent-strong: ${offenders.join(', ')}`).toEqual([])
+  })
+})
+
 describe('stylesheet hygiene', () => {
   test('no transition-all, glass, glow or blur', () => {
     for (const css of [tokensCss, globalsCss]) {
