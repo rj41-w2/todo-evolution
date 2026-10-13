@@ -29,11 +29,13 @@ export interface TaskCreate {
 
 export interface TaskUpdate {
   title?: string;
-  description?: string;
+  // `null` clears the field: the API's `TaskUpdate` is `Optional[...] = None`
+  // and only updates keys that were sent (`exclude_unset`).
+  description?: string | null;
   status?: Status;
   priority?: Priority;
   tags?: string[];
-  due_date?: string;
+  due_date?: string | null;
 }
 
 export interface ChatMessage {

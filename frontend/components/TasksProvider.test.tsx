@@ -52,7 +52,7 @@ beforeEach(() => {
 })
 
 function Harness() {
-  const { tasks, loading, error, dismissError, createTask, toggleTaskStatus, deleteTask } = useTasks()
+  const { tasks, loading, error, dismissError, createTask, toggleTaskStatus, deleteTask, updateTask } = useTasks()
   const counts = countTasks(tasks)
   const firstOpen = tasks.find(t => t.status === 'Pending')
   return (
@@ -62,10 +62,12 @@ function Harness() {
       <span data-testid="open">{counts.open}</span>
       <span data-testid="done">{counts.done}</span>
       <span data-testid="ids">{tasks.map(t => t.id).join(',')}</span>
+      <span data-testid="title-0">{tasks[0]?.title ?? ''}</span>
       <span data-testid="error">{error ?? ''}</span>
       <button onClick={() => createTask({ title: 'New task' })}>add</button>
       <button onClick={() => firstOpen && toggleTaskStatus(firstOpen)}>complete</button>
       <button onClick={() => tasks[0] && deleteTask(tasks[0].id)}>delete</button>
+      <button onClick={() => tasks[0] && updateTask(tasks[0], { title: 'Renamed' })}>rename</button>
       <button onClick={dismissError}>dismiss</button>
     </div>
   )
@@ -172,5 +174,42 @@ describe('TasksProvider — optimistic updates roll back and surface the failure
 
     fireEvent.click(screen.getByText('dismiss'))
     expect(screen.getByTestId('error')).toHaveTextContent('')
+  })
+})
+
+describe('TasksProvider — editing a task goes through the shared source', () => {
+  test('an edit shows locally at once, then settles on the saved task', async () => {
+    mockFetch.mockImplementation(async (_path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending')])
+      if (method === 'PUT') return jsonResponse(task('a', 'Renamed by the server', 'Pending'))
+      throw new Error(`unexpected ${method}`)
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('rename'))
+    // the row reflects the edit before the server answers
+    expect(screen.getByTestId('title-0')).toHaveTextContent('Renamed')
+
+    await waitFor(() => expect(screen.getByTestId('title-0')).toHaveTextContent('Renamed by the server'))
+  })
+
+  test('a failed edit rolls the row back to its original values and surfaces the error', async () => {
+    mockFetch.mockImplementation(async (_path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return jsonResponse([task('a', 'Write report', 'Pending')])
+      return failedResponse()
+    })
+
+    render(<TasksProvider><Harness /></TasksProvider>)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireEvent.click(screen.getByText('rename'))
+    expect(screen.getByTestId('title-0')).toHaveTextContent('Renamed')
+
+    await waitFor(() => expect(screen.getByTestId('title-0')).toHaveTextContent('Write report'))
+    expect(screen.getByTestId('error').textContent).not.toBe('')
   })
 })

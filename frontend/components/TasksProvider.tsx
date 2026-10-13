@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
-import type { AuthUser, Task, TaskCreate, Status } from '../types';
+import type { AuthUser, Task, TaskCreate, TaskUpdate, Status } from '../types';
 
 interface TasksContextValue {
   tasks: Task[];
@@ -14,6 +14,7 @@ interface TasksContextValue {
   dismissError: () => void;
   fetchTasks: () => Promise<void>;
   createTask: (taskData: TaskCreate) => Promise<void>;
+  updateTask: (task: Task, patch: TaskUpdate) => Promise<void>;
   toggleTaskStatus: (task: Task) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
 }
@@ -114,6 +115,44 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     [user],
   );
 
+  const updateTask = useCallback(
+    async (task: Task, patch: TaskUpdate) => {
+      if (!user?.id) return;
+
+      // Drop the keys the caller left alone, so the API's `exclude_unset` only
+      // touches the fields the user actually edited.
+      const changes = Object.fromEntries(
+        Object.entries(patch).filter(([, value]) => value !== undefined),
+      ) as TaskUpdate;
+      if (Object.keys(changes).length === 0) return;
+
+      // 1. Optimistic update
+      setError(null);
+      setTasks(prevTasks => prevTasks.map(t => (t.id === task.id ? { ...t, ...changes } : t)));
+
+      try {
+        const res = await secureFetch(`/api/${user.id}/tasks/${task.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(changes),
+        });
+
+        if (res.ok) {
+          const updatedTask = await res.json();
+          // 2. Success: replace the local task with the edited task
+          setTasks(prevTasks => prevTasks.map(t => (t.id === task.id ? updatedTask : t)));
+        } else {
+          throw new Error('Failed to update task');
+        }
+      } catch (error) {
+        console.error('Failed to update task:', error);
+        // 3. Rollback: `task` is the row exactly as it was before the edit.
+        setTasks(prevTasks => prevTasks.map(t => (t.id === task.id ? task : t)));
+        setError('Could not save those changes. The task was put back — please try again.');
+      }
+    },
+    [user],
+  );
+
   const toggleTaskStatus = useCallback(
     async (task: Task) => {
       if (!user?.id) return;
@@ -180,8 +219,8 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   );
 
   const value = useMemo<TasksContextValue>(
-    () => ({ tasks, loading, user, error, dismissError, fetchTasks, createTask, toggleTaskStatus, deleteTask }),
-    [tasks, loading, user, error, dismissError, fetchTasks, createTask, toggleTaskStatus, deleteTask],
+    () => ({ tasks, loading, user, error, dismissError, fetchTasks, createTask, updateTask, toggleTaskStatus, deleteTask }),
+    [tasks, loading, user, error, dismissError, fetchTasks, createTask, updateTask, toggleTaskStatus, deleteTask],
   );
 
   return <TasksContext.Provider value={value}>{children}</TasksContext.Provider>;

@@ -131,4 +131,65 @@ describe('tasks page', () => {
     // backend does not model.
     expect(screen.queryByRole('combobox', { name: /status/i })).not.toBeInTheDocument()
   })
+
+  test('editing a row sends the change to the API and the ledger shows it', async () => {
+    mockFetch.mockImplementation(async (_path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return { ok: true, json: async () => ledger } as unknown as Response
+      if (method === 'PUT') {
+        return { ok: true, json: async () => ({ ...ledger[0], title: 'Write the memo' }) } as unknown as Response
+      }
+      throw new Error(`unexpected ${method}`)
+    })
+
+    page()
+    await waitFor(() => expect(screen.getByText('Write report')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Write report' }))
+    const form = screen.getByRole('form', { name: 'Edit task: Write report' })
+    fireEvent.change(within(form).getByLabelText('Title'), { target: { value: 'Write the memo' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.getByText('Write the memo')).toBeInTheDocument())
+
+    const put = mockFetch.mock.calls.find(([, options]) => options?.method === 'PUT')
+    expect(put?.[0]).toBe('/api/user-1/tasks/a')
+    expect(JSON.parse(put?.[1]?.body as string)).toMatchObject({ title: 'Write the memo' })
+  })
+
+  test('a failed edit puts the row back and surfaces the failure', async () => {
+    mockFetch.mockImplementation(async (_path, options) => {
+      const method = options?.method ?? 'GET'
+      if (method === 'GET') return { ok: true, json: async () => ledger } as unknown as Response
+      return { ok: false, json: async () => ({}) } as unknown as Response
+    })
+
+    page()
+    await waitFor(() => expect(screen.getByText('Write report')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Write report' }))
+    const form = screen.getByRole('form', { name: 'Edit task: Write report' })
+    fireEvent.change(within(form).getByLabelText('Title'), { target: { value: 'Write the memo' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(screen.queryByText('Write the memo')).not.toBeInTheDocument())
+    expect(screen.getByText('Write report')).toBeInTheDocument()
+    expect((await screen.findByRole('alert')).textContent).not.toBe('')
+  })
+
+  test('the row editor is keyboard operable: focus lands in it and Escape abandons the edit', async () => {
+    page()
+    await waitFor(() => expect(screen.getByText('Write report')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Write report' }))
+    const form = screen.getByRole('form', { name: 'Edit task: Write report' })
+    expect(within(form).getByLabelText('Title')).toHaveFocus()
+
+    fireEvent.change(within(form).getByLabelText('Title'), { target: { value: 'Abandoned' } })
+    fireEvent.keyDown(within(form).getByLabelText('Title'), { key: 'Escape' })
+
+    expect(screen.queryByRole('form', { name: 'Edit task: Write report' })).not.toBeInTheDocument()
+    expect(screen.getByText('Write report')).toBeInTheDocument()
+    expect(mockFetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false)
+  })
 })

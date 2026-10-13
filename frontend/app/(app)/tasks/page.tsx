@@ -15,7 +15,7 @@ import { countByFilter, filterTasks, TaskFilter } from '../../../lib/task-filter
  * to drift.
  */
 export default function TasksPage() {
-  const { tasks, loading, error, dismissError, createTask, toggleTaskStatus, deleteTask } = useTasks();
+  const { tasks, loading, error, dismissError, createTask, updateTask, toggleTaskStatus, deleteTask } = useTasks();
   const [filter, setFilter] = useState<TaskFilter>('All');
 
   const counts = countByFilter(tasks);
@@ -63,6 +63,7 @@ export default function TasksPage() {
             hasAnyTasks={total > 0}
             onToggleStatus={toggleTaskStatus}
             onDeleteTask={deleteTask}
+            onUpdateTask={updateTask}
           />
         )}
       </AnimatePresence>

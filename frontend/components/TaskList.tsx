@@ -3,20 +3,22 @@
 import React from 'react';
 import { AnimatePresence } from 'framer-motion';
 import TaskRow from './TaskRow';
-import { Task } from '../types';
+import { Task, TaskUpdate } from '../types';
 
 interface TaskListProps {
   tasks: Task[];
   hasAnyTasks: boolean;
   onToggleStatus: (task: Task) => Promise<void>;
   onDeleteTask: (id: string) => Promise<void>;
+  /** Passed straight through to each row; omit for a read-only view. */
+  onUpdateTask?: (task: Task, patch: TaskUpdate) => Promise<void>;
 }
 
 /**
  * The ledger: open tasks then done tasks, each group counted. Rows are the
  * shared `TaskRow`, so the tasks page and the dashboard read identically.
  */
-export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteTask }: TaskListProps) {
+export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteTask, onUpdateTask }: TaskListProps) {
   const open = tasks.filter(t => t.status !== 'Completed');
   const done = tasks.filter(t => t.status === 'Completed');
 
@@ -45,6 +47,7 @@ export default function TaskList({ tasks, hasAnyTasks, onToggleStatus, onDeleteT
           task={task}
           onToggleStatus={onToggleStatus}
           onDeleteTask={onDeleteTask}
+          onUpdateTask={onUpdateTask}
         />
       ))}
     </AnimatePresence>
