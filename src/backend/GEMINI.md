@@ -105,4 +105,9 @@ uvicorn main:app --reload
 
 > [!CAUTION]
 > **Database Migrations:**
-> Direct table generation via `Base.metadata.create_all(bind=engine)` is currently configured for dev speed. If introducing complex schema updates in Phase III, migrate to Alembic to prevent destructive actions on user database records.
+> The schema is owned by **Alembic** (`src/backend/migrations/`). Run `alembic upgrade head` from `src/backend/` before starting the API. After changing a model, generate and apply a migration:
+> ```bash
+> alembic revision --autogenerate -m "add <column>"
+> alembic upgrade head
+> ```
+> Do **not** re-introduce `Base.metadata.create_all(bind=engine)`: it raises `NoReferencedTableError` because `tasks.user_id` references Better Auth's `user` table, which is not part of our metadata. Better Auth tables (`user`, `session`, `account`, `verification`, `jwks`) are created by the frontend CLI (`npx auth@latest migrate`) and are excluded from Alembic autogenerate.

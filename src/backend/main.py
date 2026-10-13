@@ -1,10 +1,14 @@
 import os
 import uuid
+import logging
 from datetime import datetime
 from typing import List, Optional
-from fastapi import FastAPI, Depends, HTTPException, Header, status
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
+from starlette import status as http_status
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("uvicorn.error")
 import jwt
 from jwt import PyJWKClient
 
@@ -13,14 +17,14 @@ import openai
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from database import engine, get_db, Base
+from database import get_db
 from models import (
     Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
     Conversation, Message, ChatRequest, ChatResponse
 )
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Tables are managed by Alembic (`alembic upgrade head`), which must run before
+# the app starts. See src/backend/migrations/.
 
 app = FastAPI(title="Todo API (Phase II - Authenticated)", version="2.0.0")
 
@@ -41,7 +45,7 @@ jwks_client = PyJWKClient(JWKS_URL)
 def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     if not authorization:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Authorization token is missing"
         )
     
@@ -49,7 +53,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
     token = token.strip()
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization scheme (must be Bearer token)"
         )
     
@@ -61,19 +65,19 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
         user_id = payload.get("sub")
         if not user_id:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+                status_code=http_status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token structure: Missing user id (subject)"
             )
         return user_id
     except jwt.ExpiredSignatureError:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Authorization token has expired"
         )
     except jwt.InvalidTokenError as e:
         # Do not expose token validation details to clients or logs.
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token"
         )
 
@@ -81,9 +85,13 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
 def root():
     return {"message": "Welcome to the Secured Todo API (Phase II)"}
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # --- CRUD Endpoints ---
 
-@app.post("/api/{user_id}/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/{user_id}/tasks", response_model=TaskResponse, status_code=http_status.HTTP_201_CREATED)
 def create_task(
     user_id: str, 
     task: TaskCreate, 
@@ -93,7 +101,7 @@ def create_task(
     # Enforce multi-tenant access: user cannot create tasks for other user IDs
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
     
@@ -115,7 +123,7 @@ def get_tasks(
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
         
@@ -135,7 +143,7 @@ def get_task(
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
         
@@ -154,7 +162,7 @@ def update_task(
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
         
@@ -170,7 +178,7 @@ def update_task(
     db.refresh(db_task)
     return db_task
 
-@app.delete("/api/{user_id}/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/api/{user_id}/tasks/{task_id}", status_code=http_status.HTTP_204_NO_CONTENT)
 def delete_task(
     user_id: str, 
     task_id: uuid.UUID, 
@@ -179,7 +187,7 @@ def delete_task(
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
         
@@ -200,14 +208,14 @@ async def chat_with_agent(
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN, 
             detail="Access denied: You cannot manage resources of another identity"
         )
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="GEMINI_API_KEY is not configured on the backend server."
         )
 
@@ -301,7 +309,7 @@ Guidelines:
                         t["function"]["parameters"]["required"].remove("user_id")
 
                 response = await client.chat.completions.create(
-                    model="gemini-2.5-flash",
+                    model="gemini-flash-latest",
                     messages=openai_history,
                     tools=openai_tools,
                     temperature=0.7
@@ -336,7 +344,7 @@ Guidelines:
                         })
                         
                     second_response = await client.chat.completions.create(
-                        model="gemini-2.5-flash",
+                        model="gemini-flash-latest",
                         messages=openai_history,
                         tools=openai_tools,
                         temperature=0.7
@@ -345,7 +353,8 @@ Guidelines:
                 else:
                     response_text = response_message.content
 
-    except Exception:
+    except Exception as exc:
+        logger.error("Chat failed for user %s: %s", user_id, exc, exc_info=True)
         db.delete(user_msg_record)
         db.commit()
         raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")

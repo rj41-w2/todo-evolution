@@ -1,5 +1,7 @@
 # Stage 1: Dependencies and Build
-FROM node:20-bookworm-slim AS builder
+# Node 24 (matches local dev). The Better Auth CLI pulls in Prisma's SQL parser,
+# which needs Object.groupBy (Node 21+), so Node 20 cannot run `npx auth migrate`.
+FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
@@ -20,7 +22,7 @@ ENV INTERNAL_BACKEND_URL=$INTERNAL_BACKEND_URL
 RUN npm run build
 
 # Stage 2: Production Runtime
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 
 WORKDIR /app
 

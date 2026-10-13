@@ -32,7 +32,7 @@ npm run build
 
 ## Backend (src/backend)
 
-- Importing `main.py` runs `Base.metadata.create_all(bind=engine)` (main.py:23) — **no Alembic/migrations** (`migrations/` is empty). Schema changes happen by editing models + recreating tables.
+- Schema is managed by **Alembic** (`src/backend/migrations/`). Run `alembic upgrade head` from `src/backend/` (or just start the Docker image, whose CMD does it) **before** the API can serve requests. After editing models: `alembic revision --autogenerate -m "..."` then `alembic upgrade head`. Do not re-add `Base.metadata.create_all` — it crashes on the `tasks.user_id -> user.id` FK because Better Auth's `user` table is not in our metadata.
 - **Requires `DATABASE_URL`** (database.py:10 raises `RuntimeError` otherwise). Secrets come from env / `.env`, never hardcode.
 - **Auth**: Better Auth (frontend) issues EdDSA JWTs fetched from `JWKS_URL` (`http://frontend:3000/api/auth/jwks` by default). Backend verifies via `PyJWKClient` (main.py:38). All `/api/{user_id}/...` routes are multi-tenant: they 403 if the token's `sub` != the URL `user_id`.
 - **Chat** (`POST /api/{user_id}/chat`) spawns `mcp_server.py` as a stdio subprocess and calls Gemini via OpenAI-compat endpoint; requires `GEMINI_API_KEY`. Server injects `user_id` into tool args — don't trust client-supplied `user_id`.
@@ -49,4 +49,6 @@ Per GEMINI.md, a single change touches all three: SQLAlchemy model (`src/backend
 
 ## docker-compose
 
-`docker-compose.yml` wires backend (:8000) + frontend (:3000) with env from root `.env` (`DATABASE_URL`, `BETTER_AUTH_SECRET`, `GEMINI_API_KEY`). Backend default `JWKS_URL` points at `http://frontend:3000`.
+`docker-compose.yml` wires `auth-migrate` (one-shot) + backend (:8000) + frontend (:3000) with env from root `.env` (`DATABASE_URL`, `BETTER_AUTH_SECRET`, `GEMINI_API_KEY`). Backend default `JWKS_URL` points at `http://frontend:3000`.
+
+`auth-migrate` runs `npx auth migrate --yes` from the frontend builder stage and must complete before the backend starts — the app tables have FKs into Better Auth's `user`. The backend CMD then runs `alembic upgrade head` before uvicorn.

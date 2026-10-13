@@ -1,4 +1,20 @@
 services:
+  # One-shot: Better Auth owns user/session/account/verification/jwks. Those must
+  # exist before the backend's migrations, because tasks/conversations/messages
+  # have foreign keys into "user"."id". Runs the frontend's builder stage (deps +
+  # source, no Next.js build) and exits.
+  auth-migrate:
+    build:
+      context: ./frontend
+      target: builder
+    command: ["npx", "auth", "migrate", "--yes"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
+    networks:
+      - todo-network
+
   backend:
     build:
       context: ./src/backend
@@ -10,6 +26,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - JWKS_URL=${JWKS_URL:-http://frontend:3000/api/auth/jwks}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
     networks:
       - todo-network
 

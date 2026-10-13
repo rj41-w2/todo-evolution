@@ -105,6 +105,8 @@ docker compose up --build
 - Frontend: `http://localhost:3000`
 - Backend API: `http://localhost:8000`
 
+Compose runs three services: a one-shot `auth-migrate` (Better Auth tables), then `backend` (Alembic + uvicorn), then `frontend`. It works against an empty database.
+
 ### Local Development
 
 **Backend:**
@@ -112,6 +114,7 @@ docker compose up --build
 ```bash
 cd src/backend
 pip install -r requirements.txt
+alembic upgrade head        # creates tasks/conversations/messages (run after the auth migrate below)
 uvicorn main:app --reload
 ```
 
@@ -120,8 +123,11 @@ uvicorn main:app --reload
 ```bash
 cd frontend
 npm install
+npx auth@latest migrate                        # creates user/session/account/verification/jwks
 npm run dev
 ```
+
+> Run the Better Auth migrate **before** `alembic upgrade head` — the app tables have foreign keys to `"user"."id"`.
 
 ### Phase I (CLI)
 
