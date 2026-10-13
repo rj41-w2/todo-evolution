@@ -1,6 +1,6 @@
 'use client';
 
-import { countTasks } from '../lib/task-counts';
+import { completionPercent, countTasks } from '../lib/task-counts';
 import { useTasks } from './TasksProvider';
 
 /**
@@ -11,7 +11,7 @@ import { useTasks } from './TasksProvider';
 export function StatusRail({ className = '' }: { className?: string }) {
   const { tasks, loading } = useTasks();
   const counts = countTasks(tasks);
-  const percent = counts.total === 0 ? 0 : Math.round((counts.done / counts.total) * 100);
+  const percent = completionPercent(counts);
 
   return (
     <aside

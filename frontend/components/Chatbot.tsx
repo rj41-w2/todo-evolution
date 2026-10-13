@@ -7,15 +7,18 @@ import {
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
 import { AuthUser, ChatMessage, ToolCall, ChatResponse } from '../types';
+import { deriveLatestAgentAction, describeToolCall, publishAgentActivity } from '../lib/agent-activity';
 
 interface ChatbotProps {
   onTaskMutation: () => void;
+  /** Controlled open state, so a dashboard quick action can open the drawer. */
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 const EASE_OUT: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
-export default function Chatbot({ onTaskMutation }: ChatbotProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,8 +42,14 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
         const storedToolLogs = localStorage.getItem(`evo_tool_logs_${currentUser.id}`);
 
         if (storedConvId) setConversationId(storedConvId);
-        if (storedMessages) setMessages(JSON.parse(storedMessages));
-        if (storedToolLogs) setToolLogs(JSON.parse(storedToolLogs));
+        const parsedMessages: ChatMessage[] = storedMessages ? JSON.parse(storedMessages) : [];
+        const parsedToolLogs: Record<string, ToolCall[]> = storedToolLogs ? JSON.parse(storedToolLogs) : {};
+        if (storedMessages) setMessages(parsedMessages);
+        if (storedToolLogs) setToolLogs(parsedToolLogs);
+
+        // The restored conversation is the real one from this browser session —
+        // publish its latest agent turn so the dashboard panel reflects it.
+        publishAgentActivity(deriveLatestAgentAction(parsedMessages, parsedToolLogs));
       }
     };
     initChat();
@@ -60,6 +69,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
     localStorage.removeItem(`evo_conv_id_${user.id}`);
     localStorage.removeItem(`evo_chat_history_${user.id}`);
     localStorage.removeItem(`evo_tool_logs_${user.id}`);
+    publishAgentActivity(null);
   };
 
   // 4. Send Message to FastAPI Agent
@@ -129,6 +139,9 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
         setMessages(finalMessages);
         localStorage.setItem(`evo_chat_history_${user.id}`, JSON.stringify(finalMessages));
 
+        // The turn that just happened is the new "latest agent action".
+        publishAgentActivity(deriveLatestAgentAction(finalMessages, newToolLogs));
+
       } else {
         throw new Error('Failed to get response from assistant');
       }
@@ -141,7 +154,9 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
         content: "Sorry, I ran into an issue connecting to the AI brain. Please check your network and Gemini API key config.",
         created_at: new Date().toISOString()
       };
-      setMessages([...updatedMessages, errorMsg]);
+      const finalMessages = [...updatedMessages, errorMsg];
+      setMessages(finalMessages);
+      publishAgentActivity(deriveLatestAgentAction(finalMessages, toolLogs));
     } finally {
       setIsLoading(false);
     }
@@ -158,29 +173,17 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
     }
   };
 
-  const getToolLabel = (toolName: string, result: Record<string, unknown>) => {
-    const title = typeof result?.title === 'string' ? `"${result.title}"` : 'task';
-    switch (toolName) {
-      case 'add_task': return `Added task ${title}`;
-      case 'complete_task': return `Completed task ${title}`;
-      case 'delete_task': return `Deleted task ${title}`;
-      case 'update_task': return `Updated task ${title}`;
-      case 'list_tasks': return `Retrieved task lists`;
-      default: return `Executed tool ${toolName}`;
-    }
-  };
-
   return (
     <div className="fixed bottom-6 right-6 z-[var(--z-modal)]">
       <AnimatePresence>
         {/* Floating Chat Bubble Button */}
-        {!isOpen && (
+        {!open && (
           <motion.button
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ duration: 0.2, ease: EASE_OUT }}
-            onClick={() => setIsOpen(true)}
+            onClick={() => onOpenChange(true)}
             aria-label="Open AI assistant"
             className="btn-primary h-14 w-14 rounded-full p-0"
           >
@@ -191,7 +194,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
 
       <AnimatePresence>
         {/* Expandable Chat Drawer Container */}
-        {isOpen && (
+        {open && (
           <motion.div
             initial={{ opacity: 0, y: 24, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -221,7 +224,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                   </button>
                 )}
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={() => onOpenChange(false)}
                   aria-label="Close AI assistant"
                   className="icon-btn"
                 >
@@ -282,7 +285,7 @@ export default function Chatbot({ onTaskMutation }: ChatbotProps) {
                             className="chip"
                           >
                             {getToolIcon(toolCall.tool)}
-                            {getToolLabel(toolCall.tool, toolCall.result)}
+                            {describeToolCall(toolCall.tool, toolCall.result)}
                           </span>
                         ))}
                       </div>
