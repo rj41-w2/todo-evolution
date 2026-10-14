@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum, ForeignKey, Table
@@ -44,7 +44,7 @@ class Task(Base):
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.PENDING)
     priority = Column(SQLEnum(PriorityEnum), default=PriorityEnum.MEDIUM)
     tags = Column(JSON, default=[])
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     due_date = Column(DateTime, nullable=True)
 
 class Conversation(Base):
@@ -52,8 +52,8 @@ class Conversation(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class Message(Base):
     __tablename__ = "messages"
@@ -63,7 +63,7 @@ class Message(Base):
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False) # "user" or "assistant"
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 # --- Pydantic Schemas ---
 
@@ -74,7 +74,6 @@ class TaskBase(BaseModel):
     priority: PriorityEnum = PriorityEnum.MEDIUM
     tags: List[str] = Field(default_factory=list, max_length=50)
     due_date: Optional[datetime] = None
-    user_id: Optional[str] = None
 
 class TaskCreate(TaskBase):
     pass

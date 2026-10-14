@@ -2,7 +2,8 @@ from mcp.server.fastmcp import FastMCP
 import uuid
 from typing import List, Optional
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from sqlalchemy import func
 
 from database import SessionLocal
 from models import Task, StatusEnum, PriorityEnum
@@ -37,7 +38,7 @@ def add_task(
         due_date: Optional ISO-8601 formatted datetime string for the task deadline (e.g. "2026-07-01T15:00:00Z").
     """
     if not title or not title.strip():
-        return json.dumps({"error": "title is required"})
+        raise ValueError("title is required")
 
     db = SessionLocal()
     try:
@@ -146,15 +147,15 @@ def complete_task(
         except ValueError:
             pass
             
-        # 2. Try search by title substring (case-insensitive)
+        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
         if not db_task:
             db_task = db.query(Task).filter(
                 Task.user_id == user_id,
-                Task.title.ilike(f"%{task_id}%")
+                Task.title.ilike(func.concat("%", task_id, "%"))
             ).order_by(Task.status.asc(), Task.created_at.desc()).first()
             
         if not db_task:
-            return json.dumps({"error": f"Task not found with ID or name matching '{task_id}'."})
+            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
             
         db_task.status = StatusEnum.COMPLETED
         db.commit()
@@ -188,15 +189,15 @@ def delete_task(
         except ValueError:
             pass
             
-        # 2. Try search by title substring (case-insensitive)
+        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
         if not db_task:
             db_task = db.query(Task).filter(
                 Task.user_id == user_id,
-                Task.title.ilike(f"%{task_id}%")
+                Task.title.ilike(func.concat("%", task_id, "%"))
             ).order_by(Task.created_at.desc()).first()
             
         if not db_task:
-            return json.dumps({"error": f"Task not found with ID or name matching '{task_id}'."})
+            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
             
         db.delete(db_task)
         db.commit()
@@ -237,19 +238,19 @@ def update_task(
         except ValueError:
             pass
             
-        # 2. Try search by title substring (case-insensitive)
+        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
         if not db_task:
             db_task = db.query(Task).filter(
                 Task.user_id == user_id,
-                Task.title.ilike(f"%{task_id}%")
+                Task.title.ilike(func.concat("%", task_id, "%"))
             ).order_by(Task.created_at.desc()).first()
             
         if not db_task:
-            return json.dumps({"error": f"Task not found with ID or name matching '{task_id}'."})
+            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
             
         if title is not None:
             if not title.strip():
-                return json.dumps({"error": "title cannot be empty"})
+                raise ValueError("title cannot be empty")
             db_task.title = title
         if description is not None:
             db_task.description = description
@@ -278,4 +279,32 @@ def update_task(
         db.close()
 
 if __name__ == "__main__":
-    mcp.run()
+    import os
+    transport = os.getenv("MCP_TRANSPORT", "stdio")
+    if transport == "sse":
+        # For SSE, use uvicorn directly to control host/port
+        import uvicorn
+        from mcp.server.sse import SseServerTransport
+        from starlette.applications import Starlette
+        from starlette.routing import Route, Mount
+        
+        sse = SseServerTransport("/messages/")
+        
+        async def handle_sse(request):
+            async with sse.connect_sse(
+                request.scope, request.receive, request._send
+            ) as streams:
+                await mcp._mcp_server.run(
+                    streams[0], streams[1], mcp._mcp_server.create_initialization_options()
+                )
+        
+        starlette_app = Starlette(
+            routes=[
+                Route("/sse", handle_sse),
+                Mount("/messages/", app=sse.handle_post_message),
+            ]
+        )
+        
+        uvicorn.run(starlette_app, host="0.0.0.0", port=8001)
+    else:
+        mcp.run()

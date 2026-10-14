@@ -7,6 +7,7 @@ from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status as http_status
 from sqlalchemy.orm import Session
+import sqlalchemy as sa
 
 logger = logging.getLogger("uvicorn.error")
 import jwt
@@ -14,8 +15,8 @@ from jwt import PyJWKClient
 
 import json
 import openai
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from mcp import ClientSession
+from mcp.client.sse import sse_client
 
 from database import get_db
 from models import (
@@ -26,12 +27,21 @@ from models import (
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
 # the app starts. See src/backend/migrations/.
 
+# Module-level OpenAI client singleton (Issue 7)
+openai_client = openai.AsyncOpenAI(
+    api_key=os.getenv("GEMINI_API_KEY"),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
+
 app = FastAPI(title="Todo API (Phase II - Authenticated)", version="2.0.0")
 
 # CORS Middleware configuration
+cors_origins = os.getenv("CORS_ORIGINS")
+if not cors_origins:
+    raise RuntimeError("CORS_ORIGINS must be configured")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()],
+    allow_origins=[origin.strip() for origin in cors_origins.split(",") if origin.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -227,10 +237,20 @@ async def chat_with_agent(
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation session not found")
     else:
-        conversation = Conversation(user_id=user_id)
-        db.add(conversation)
-        db.commit()
-        db.refresh(conversation)
+        # Prevent race condition: use PostgreSQL advisory lock on user_id hash
+        # This serializes conversation creation per user
+        lock_key = abs(hash(user_id)) % (2**31)
+        db.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+        
+        # Re-check inside lock: another request may have created a conversation
+        conversation = db.query(Conversation).filter(
+            Conversation.user_id == user_id
+        ).order_by(Conversation.created_at.desc()).first()
+        
+        if not conversation:
+            conversation = Conversation(user_id=user_id)
+            db.add(conversation)
+            # No commit here - single transaction at end
 
     messages = db.query(Message).filter(
         Message.conversation_id == conversation.id,
@@ -245,8 +265,7 @@ async def chat_with_agent(
         content=chat_req.message
     )
     db.add(user_msg_record)
-    db.commit()
-    db.refresh(user_msg_record)
+    # No commit here - single transaction at end
 
     system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
 Your job is to help the user manage their tasks (add, update, delete, complete, and list tasks) using your available tools.
@@ -269,22 +288,16 @@ Guidelines:
         openai_history.append({"role": role, "content": msg.content})
     openai_history.append({"role": "user", "content": chat_req.message})
 
-    client = openai.AsyncOpenAI(
-        api_key=api_key,
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-    )
+    # Use module-level singleton client (Issue 7)
+    client = openai_client
 
     executed_tools = []
-    response_text = "I have processed your request."
+    response_text = None
+
+    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://mcp:8001/sse")
 
     try:
-        server_params = StdioServerParameters(
-            command="python",
-            args=[os.path.join(os.path.dirname(__file__), "mcp_server.py")],
-            env=os.environ.copy()
-        )
-
-        async with stdio_client(server_params) as (read, write):
+        async with sse_client(mcp_server_url) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 
@@ -309,7 +322,7 @@ Guidelines:
                         t["function"]["parameters"]["required"].remove("user_id")
 
                 response = await client.chat.completions.create(
-                    model="gemini-flash-latest",
+                    model="gemini-1.5-flash-latest",
                     messages=openai_history,
                     tools=openai_tools,
                     temperature=0.7
@@ -344,7 +357,7 @@ Guidelines:
                         })
                         
                     second_response = await client.chat.completions.create(
-                        model="gemini-flash-latest",
+                        model="gemini-1.5-flash-latest",
                         messages=openai_history,
                         tools=openai_tools,
                         temperature=0.7
@@ -355,8 +368,7 @@ Guidelines:
 
     except Exception as exc:
         logger.error("Chat failed for user %s: %s", user_id, exc, exc_info=True)
-        db.delete(user_msg_record)
-        db.commit()
+        # Session auto-rolls back on exception; no manual cleanup needed
         raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")
 
     assistant_msg_record = Message(
