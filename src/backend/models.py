@@ -25,6 +25,8 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # FK to Better Auth `user.id` — see docs/external-seams.md for sync contract
+    # Owner: Frontend (Better Auth). ON DELETE CASCADE: user deletion removes tasks.
     user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -38,6 +40,8 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # FK to Better Auth `user.id` — see docs/external-seams.md for sync contract
+    # Owner: Frontend (Better Auth). ON DELETE CASCADE: user deletion removes conversations.
     user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -46,6 +50,9 @@ class Message(Base):
     __tablename__ = "messages"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # FK to Better Auth `user.id` — see docs/external-seams.md for sync contract
+    # Owner: Frontend (Better Auth). ON DELETE CASCADE: user deletion removes messages.
+    # Note: denormalized (also on conversations.user_id) for read performance.
     user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False) # "user" or "assistant"
