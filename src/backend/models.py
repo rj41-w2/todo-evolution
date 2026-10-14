@@ -2,28 +2,15 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum, ForeignKey, Table
+from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from pydantic import BaseModel, Field
 
 from database import Base
 
-# --- SQLAlchemy Models ---
-
-# Better Auth (frontend) owns the real `user` table; it never lives in this
-# metadata. This minimal stub lets SQLAlchemy resolve the ForeignKey on
-# tasks.user_id / conversations.user_id / messages.user_id at flush time —
-# otherwise the mapper raises NoReferencedTableError on INSERT/UPDATE.
-#
-# Never call Base.metadata.create_all: the app schema (`tasks`,
-# `conversations`, `messages`) is owned by Alembic and `user` is owned by the
-# Better Auth CLI. migrations/env.py registers the same stub and excludes the
-# auth tables (including `user`) from autogenerate.
-user = Table(
-    "user",
-    Base.metadata,
-    Column("id", String, primary_key=True),
-)
+# Import user stub from repositories to register FK target in metadata.
+# See repositories/user_stub.py for documentation of this external seam.
+from repositories.user_stub import user  # noqa: F401
 
 class PriorityEnum(str, Enum):
     LOW = "Low"

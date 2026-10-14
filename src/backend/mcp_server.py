@@ -3,12 +3,16 @@ import uuid
 from typing import List, Optional
 import json
 from datetime import datetime, timezone
-from sqlalchemy import func
 
 from database import SessionLocal
 from models import Task, StatusEnum, PriorityEnum
+from repositories import SqlTaskRepository
 
 mcp = FastMCP("TodoMCP")
+
+def _get_task_repo() -> SqlTaskRepository:
+    """Get a task repository with a new session."""
+    return SqlTaskRepository(SessionLocal())
 
 def parse_due_date(value: str | None):
     if not value:
@@ -40,7 +44,7 @@ def add_task(
     if not title or not title.strip():
         raise ValueError("title is required")
 
-    db = SessionLocal()
+    repo = _get_task_repo()
     try:
         p_enum = PriorityEnum.MEDIUM
         if priority:
@@ -63,16 +67,15 @@ def add_task(
             "status": StatusEnum.PENDING
         }
         db_task = Task(**task_data)
-        db.add(db_task)
-        db.commit()
-        db.refresh(db_task)
+        repo.create(db_task)
+        repo.session.commit()
         return json.dumps({
             "task_id": str(db_task.id),
             "status": "created",
             "title": db_task.title
         })
     finally:
-        db.close()
+        repo.session.close()
 
 @mcp.tool()
 def list_tasks(
@@ -87,28 +90,25 @@ def list_tasks(
         status: Optional status ("all", "pending", "completed").
         priority: Optional priority ("Low", "Medium", "High").
     """
-    db = SessionLocal()
+    repo = _get_task_repo()
     try:
-        query = db.query(Task).filter(Task.user_id == user_id)
-        
+        status_enum = None
         if status and status.lower() != "all":
             if status.lower() == "completed":
-                query = query.filter(Task.status == StatusEnum.COMPLETED)
+                status_enum = StatusEnum.COMPLETED
             elif status.lower() == "pending":
-                query = query.filter(Task.status == StatusEnum.PENDING)
+                status_enum = StatusEnum.PENDING
                 
+        priority_enum = None
         if priority:
-            p_enum = None
             if priority.lower() == "low":
-                p_enum = PriorityEnum.LOW
+                priority_enum = PriorityEnum.LOW
             elif priority.lower() == "medium":
-                p_enum = PriorityEnum.MEDIUM
+                priority_enum = PriorityEnum.MEDIUM
             elif priority.lower() == "high":
-                p_enum = PriorityEnum.HIGH
-            if p_enum:
-                query = query.filter(Task.priority == p_enum)
+                priority_enum = PriorityEnum.HIGH
         
-        tasks = query.all()
+        tasks = repo.list_by_user(user_id, status_enum, priority_enum)
         result = [
             {
                 "task_id": str(t.id),
@@ -124,7 +124,7 @@ def list_tasks(
         ]
         return json.dumps(result)
     finally:
-        db.close()
+        repo.session.close()
 
 @mcp.tool()
 def complete_task(
@@ -137,36 +137,23 @@ def complete_task(
         user_id: The authenticated user's ID.
         task_id: The UUID string of the task to complete, OR the task title name.
     """
-    db = SessionLocal()
+    repo = _get_task_repo()
     try:
-        db_task = None
-        # 1. Try search by UUID
-        try:
-            task_uuid = uuid.UUID(task_id)
-            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
-        except ValueError:
-            pass
-            
-        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
-        if not db_task:
-            db_task = db.query(Task).filter(
-                Task.user_id == user_id,
-                Task.title.ilike(func.concat("%", task_id, "%"))
-            ).order_by(Task.status.asc(), Task.created_at.desc()).first()
+        db_task = repo.find_by_id_or_title(user_id, task_id)
             
         if not db_task:
             raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
             
         db_task.status = StatusEnum.COMPLETED
-        db.commit()
-        db.refresh(db_task)
+        repo.update(db_task)
+        repo.session.commit()
         return json.dumps({
             "task_id": str(db_task.id),
             "status": "completed",
             "title": db_task.title
         })
     finally:
-        db.close()
+        repo.session.close()
 
 @mcp.tool()
 def delete_task(
@@ -179,35 +166,22 @@ def delete_task(
         user_id: The authenticated user's ID.
         task_id: The UUID string of the task to delete, OR the task title name.
     """
-    db = SessionLocal()
+    repo = _get_task_repo()
     try:
-        db_task = None
-        # 1. Try search by UUID
-        try:
-            task_uuid = uuid.UUID(task_id)
-            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
-        except ValueError:
-            pass
-            
-        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
-        if not db_task:
-            db_task = db.query(Task).filter(
-                Task.user_id == user_id,
-                Task.title.ilike(func.concat("%", task_id, "%"))
-            ).order_by(Task.created_at.desc()).first()
+        db_task = repo.find_by_id_or_title(user_id, task_id)
             
         if not db_task:
             raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
             
-        db.delete(db_task)
-        db.commit()
+        repo.delete(db_task)
+        repo.session.commit()
         return json.dumps({
             "task_id": str(db_task.id),
             "status": "deleted",
             "title": db_task.title
         })
     finally:
-        db.close()
+        repo.session.close()
 
 @mcp.tool()
 def update_task(
@@ -228,22 +202,9 @@ def update_task(
         priority: Optional new priority ("Low", "Medium", "High").
         due_date: Optional ISO-8601 formatted datetime string for the new task deadline.
     """
-    db = SessionLocal()
+    repo = _get_task_repo()
     try:
-        db_task = None
-        # 1. Try search by UUID
-        try:
-            task_uuid = uuid.UUID(task_id)
-            db_task = db.query(Task).filter(Task.id == task_uuid, Task.user_id == user_id).first()
-        except ValueError:
-            pass
-            
-        # 2. Try search by title substring (case-insensitive) - parameterized to prevent SQL injection
-        if not db_task:
-            db_task = db.query(Task).filter(
-                Task.user_id == user_id,
-                Task.title.ilike(func.concat("%", task_id, "%"))
-            ).order_by(Task.created_at.desc()).first()
+        db_task = repo.find_by_id_or_title(user_id, task_id)
             
         if not db_task:
             raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
@@ -268,15 +229,15 @@ def update_task(
         if due_date is not None:
             db_task.due_date = parse_due_date(due_date)
                 
-        db.commit()
-        db.refresh(db_task)
+        repo.update(db_task)
+        repo.session.commit()
         return json.dumps({
             "task_id": str(db_task.id),
             "status": "updated",
             "title": db_task.title
         })
     finally:
-        db.close()
+        repo.session.close()
 
 if __name__ == "__main__":
     import os

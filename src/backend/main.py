@@ -23,6 +23,11 @@ from models import (
     Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
     Conversation, Message, ChatRequest, ChatResponse
 )
+from repositories import (
+    SqlTaskRepository, TaskRepository,
+    SqlConversationRepository, ConversationRepository,
+    SqlMessageRepository, MessageRepository,
+)
 
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
 # the app starts. See src/backend/migrations/.
@@ -91,6 +96,20 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
             detail="Invalid authorization token"
         )
 
+# --- Repository Dependencies ---
+
+def get_task_repo(db: Session = Depends(get_db)) -> TaskRepository:
+    return SqlTaskRepository(db)
+
+
+def get_conversation_repo(db: Session = Depends(get_db)) -> ConversationRepository:
+    return SqlConversationRepository(db)
+
+
+def get_message_repo(db: Session = Depends(get_db)) -> MessageRepository:
+    return SqlMessageRepository(db)
+
+
 @app.get("/")
 def root():
     return {"message": "Welcome to the Secured Todo API (Phase II)"}
@@ -105,8 +124,8 @@ def health():
 def create_task(
     user_id: str, 
     task: TaskCreate, 
-    db: Session = Depends(get_db), 
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    task_repo: TaskRepository = Depends(get_task_repo),
 ):
     # Enforce multi-tenant access: user cannot create tasks for other user IDs
     if authenticated_user_id != user_id:
@@ -118,18 +137,15 @@ def create_task(
     task_data = task.model_dump()
     task_data["user_id"] = user_id
     db_task = Task(**task_data)
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-    return db_task
+    return task_repo.create(db_task)
 
 @app.get("/api/{user_id}/tasks", response_model=List[TaskResponse])
 def get_tasks(
     user_id: str,
     status: Optional[StatusEnum] = None, 
     priority: Optional[PriorityEnum] = None,
-    db: Session = Depends(get_db),
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    task_repo: TaskRepository = Depends(get_task_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -137,19 +153,14 @@ def get_tasks(
             detail="Access denied: You cannot manage resources of another identity"
         )
         
-    query = db.query(Task).filter(Task.user_id == user_id)
-    if status:
-        query = query.filter(Task.status == status)
-    if priority:
-        query = query.filter(Task.priority == priority)
-    return query.all()
+    return task_repo.list_by_user(user_id, status, priority)
 
 @app.get("/api/{user_id}/tasks/{task_id}", response_model=TaskResponse)
 def get_task(
     user_id: str, 
     task_id: uuid.UUID, 
-    db: Session = Depends(get_db), 
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    task_repo: TaskRepository = Depends(get_task_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -157,7 +168,7 @@ def get_task(
             detail="Access denied: You cannot manage resources of another identity"
         )
         
-    db_task = db.query(Task).filter(Task.id == task_id, Task.user_id == user_id).first()
+    db_task = task_repo.get_by_id_and_user(task_id, user_id)
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
     return db_task
@@ -167,8 +178,8 @@ def update_task(
     user_id: str, 
     task_id: uuid.UUID, 
     task_update: TaskUpdate, 
-    db: Session = Depends(get_db), 
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    task_repo: TaskRepository = Depends(get_task_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -176,7 +187,7 @@ def update_task(
             detail="Access denied: You cannot manage resources of another identity"
         )
         
-    db_task = db.query(Task).filter(Task.id == task_id, Task.user_id == user_id).first()
+    db_task = task_repo.get_by_id_and_user(task_id, user_id)
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
@@ -184,16 +195,14 @@ def update_task(
     for key, value in update_data.items():
         setattr(db_task, key, value)
     
-    db.commit()
-    db.refresh(db_task)
-    return db_task
+    return task_repo.update(db_task)
 
 @app.delete("/api/{user_id}/tasks/{task_id}", status_code=http_status.HTTP_204_NO_CONTENT)
 def delete_task(
     user_id: str, 
     task_id: uuid.UUID, 
-    db: Session = Depends(get_db), 
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    task_repo: TaskRepository = Depends(get_task_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -201,20 +210,21 @@ def delete_task(
             detail="Access denied: You cannot manage resources of another identity"
         )
         
-    db_task = db.query(Task).filter(Task.id == task_id, Task.user_id == user_id).first()
+    db_task = task_repo.get_by_id_and_user(task_id, user_id)
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    db.delete(db_task)
-    db.commit()
+    task_repo.delete(db_task)
+    task_repo.session.commit()
     return None
 
 @app.post("/api/{user_id}/chat", response_model=ChatResponse)
 async def chat_with_agent(
     user_id: str,
     chat_req: ChatRequest,
-    db: Session = Depends(get_db),
-    authenticated_user_id: str = Depends(get_current_user)
+    authenticated_user_id: str = Depends(get_current_user),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repo),
+    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -230,42 +240,34 @@ async def chat_with_agent(
         )
 
     if chat_req.conversation_id:
-        conversation = db.query(Conversation).filter(
-            Conversation.id == chat_req.conversation_id,
-            Conversation.user_id == user_id
-        ).first()
+        conversation = conversation_repo.get_by_id_and_user(chat_req.conversation_id, user_id)
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation session not found")
     else:
         # Prevent race condition: use PostgreSQL advisory lock on user_id hash
         # This serializes conversation creation per user
         lock_key = abs(hash(user_id)) % (2**31)
-        db.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
+        # Need raw session for advisory lock - get it from repository
+        session = conversation_repo.session
+        session.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
         
         # Re-check inside lock: another request may have created a conversation
-        conversation = db.query(Conversation).filter(
-            Conversation.user_id == user_id
-        ).order_by(Conversation.created_at.desc()).first()
+        conversation = conversation_repo.get_latest_by_user(user_id)
         
         if not conversation:
-            conversation = Conversation(user_id=user_id)
-            db.add(conversation)
-            # No commit here - single transaction at end
+            conversation = conversation_repo.create_for_user(user_id)
 
-    messages = db.query(Message).filter(
-        Message.conversation_id == conversation.id,
-        Message.user_id == user_id
-    ).order_by(Message.created_at.desc()).limit(10).all()
+    # Get recent history using repository (uses composite index)
+    messages = message_repo.history(conversation.id, user_id, limit=10)
     messages.reverse()
 
-    user_msg_record = Message(
-        user_id=user_id,
+    # Add user message via repository
+    user_msg_record = message_repo.add_message(
         conversation_id=conversation.id,
+        user_id=user_id,
         role="user",
         content=chat_req.message
     )
-    db.add(user_msg_record)
-    # No commit here - single transaction at end
 
     system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
 Your job is to help the user manage their tasks (add, update, delete, complete, and list tasks) using your available tools.
@@ -371,14 +373,14 @@ Guidelines:
         # Session auto-rolls back on exception; no manual cleanup needed
         raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")
 
-    assistant_msg_record = Message(
-        user_id=user_id,
+    # Add assistant message via repository
+    message_repo.add_message(
         conversation_id=conversation.id,
+        user_id=user_id,
         role="assistant",
         content=response_text or ""
     )
-    db.add(assistant_msg_record)
-    db.commit()
+    message_repo.session.commit()
 
     return ChatResponse(
         conversation_id=conversation.id,
