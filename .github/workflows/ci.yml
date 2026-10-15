@@ -108,10 +108,16 @@ jobs:
       # The image the backend actually ships. Its CMD runs `alembic upgrade head`
       # before uvicorn, so this covers startup order and packaging together —
       # the two things a test against the source tree cannot check.
+      #
+      # `--network host` is required, not incidental. The Postgres service is
+      # published on the runner's own localhost, and inside a container
+      # `localhost` means the container. The first attempt to run this passed
+      # `DATABASE_URL` straight through and failed with
+      # `connection to server at "localhost" ... Connection refused`.
       - name: Production container starts and serves
         run: |
           docker build -t todo-backend .
-          docker run -d --name todo-backend -p 8000:8000 \
+          docker run -d --name todo-backend --network host \
             -e DATABASE_URL="$DATABASE_URL" \
             -e CORS_ORIGINS="$CORS_ORIGINS" \
             -e GEMINI_API_KEY="" \
