@@ -27,10 +27,12 @@ from database import Base  # noqa: E402
 
 # Our tables carry foreign keys into Better Auth's `user` table, which lives
 # outside this metadata. SQLAlchemy must resolve that table to sort and diff the
-# foreign keys, so import the stub from repositories. include_object() below
-# keeps it out of autogenerate, so Alembic never creates, alters or drops the
-# real table.
-import repositories.user_stub  # noqa: F401  registers stub on Base.metadata
+# foreign keys, so import the stub. include_object() below keeps it out of
+# autogenerate, so Alembic never creates, alters or drops the real table.
+#
+# `models` already imports it (models.py), but import it explicitly so this
+# stays correct if that import is ever made lazy.
+import user_stub  # noqa: F401  registers stub on Base.metadata
 
 config = context.config
 

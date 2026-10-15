@@ -1,0 +1,27 @@
+# Keep local development artifacts out of the image.
+#
+# `Dockerfile` runs `COPY . .`, and without this file the build context for
+# src/backend contains two virtualenvs and a real .env file. That means every
+# image push ships plaintext DATABASE_URL / BETTER_AUTH_SECRET / GEMINI_API_KEY
+# and hundreds of MB of junk.
+
+# Secrets — injected at runtime via docker-compose `environment:`
+.env
+.env.*
+!.env.example
+
+# Virtualenvs (there are two: .venv and venv)
+.venv/
+venv/
+env/
+
+# Python bytecode and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test and scratch output
+tests/
+.scratch/

@@ -33,10 +33,11 @@ npm run build
 
 ## Backend (src/backend)
 
+- **Backend tests**: `src/backend/` me pytest chalta hai, Phase I ke unittest ke alag. `python -m pytest` (integration marker deselect hota hai), `python -m pytest tests/test_bootability.py` — ye P0 gate hai, backend/MCP ka cold boot check karta hai. CI me `backend` job yehi chalata hai. `user_stub.py` backend root par hai, `repositories/` me nahi — wahan se import karne se circular import ban jata hai.
 - Schema is managed by **Alembic** (`src/backend/migrations/`). Run `alembic upgrade head` from `src/backend/` (or just start the Docker image, whose CMD does it) **before** the API can serve requests. After editing models: `alembic revision --autogenerate -m "..."` then `alembic upgrade head`. Do not re-add `Base.metadata.create_all` — it crashes on the `tasks.user_id -> user.id` FK because Better Auth's `user` table is not in our metadata.
 - **Requires `DATABASE_URL`** (database.py:10 raises `RuntimeError` otherwise). Secrets come from env / `.env`, never hardcode.
 - **Auth**: Better Auth (frontend) issues EdDSA JWTs fetched from `JWKS_URL` (`http://frontend:3000/api/auth/jwks` by default). Backend verifies via `PyJWKClient` (main.py:38). All `/api/{user_id}/...` routes are multi-tenant: they 403 if the token's `sub` != the URL `user_id`.
-- **Chat** (`POST /api/{user_id}/chat`) spawns `mcp_server.py` as a stdio subprocess and calls Gemini via OpenAI-compat endpoint; requires `GEMINI_API_KEY`. Server injects `user_id` into tool args — don't trust client-supplied `user_id`.
+- **Chat** (`POST /api/{user_id}/chat`) spawns `mcp_server.py` as a stdio subprocess and calls Gemini via OpenAI-compat endpoint; **requires `GEMINI_API_KEY`** — the client is built lazily, so a missing key returns 503 on this one route instead of killing the whole API at boot. Server injects `user_id` into tool args — don't trust client-supplied `user_id`.
 
 ## Frontend (frontend/)
 

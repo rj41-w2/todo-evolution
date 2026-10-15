@@ -1,0 +1,6 @@
+# Test-only dependencies. Kept out of requirements.txt so the runtime images
+# do not ship pytest.
+#
+# Install: pip install -r requirements.txt -r requirements-dev.txt
+pytest
+httpx

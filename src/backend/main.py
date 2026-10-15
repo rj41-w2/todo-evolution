@@ -32,11 +32,30 @@ from repositories import (
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
 # the app starts. See src/backend/migrations/.
 
-# Module-level OpenAI client singleton (Issue 7)
-openai_client = openai.AsyncOpenAI(
-    api_key=os.getenv("GEMINI_API_KEY"),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
-)
+# OpenAI client singleton (Issue 7), built lazily.
+#
+# GEMINI_API_KEY is only needed by POST /chat, but constructing the client at
+# import time made a missing key crash the whole API at boot — including task
+# CRUD, which needs no key at all. The OpenAI SDK also raises when api_key is
+# None, so the failure surfaced as a misleading "set OPENAI_API_KEY" error.
+_openai_client = None
+
+
+def get_openai_client() -> openai.AsyncOpenAI:
+    """Return the shared Gemini client, building it on first use."""
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise HTTPException(
+                status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Chat is unavailable: GEMINI_API_KEY is not configured",
+            )
+        _openai_client = openai.AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+    return _openai_client
 
 app = FastAPI(title="Todo API (Phase II - Authenticated)", version="2.0.0")
 
@@ -290,8 +309,8 @@ Guidelines:
         openai_history.append({"role": role, "content": msg.content})
     openai_history.append({"role": "user", "content": chat_req.message})
 
-    # Use module-level singleton client (Issue 7)
-    client = openai_client
+    # Use the shared singleton client (Issue 7), built on first use
+    client = get_openai_client()
 
     executed_tools = []
     response_text = None

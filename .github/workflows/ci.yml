@@ -14,6 +14,31 @@ jobs:
           python-version: "3.10"
       - run: python -m unittest discover -s tests -v
 
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      # Retry flags mirror the backend Dockerfile. PyPI read timeouts are common
+      # enough here that a bare `pip install` turns into a flaky red build.
+      - run: pip install --default-timeout=100 --retries 5 -r requirements.txt -r requirements-dev.txt
+      # Hard gate: the API and MCP services must boot from a cold interpreter.
+      # This is the step that catches an import/startup regression (issue #1).
+      - run: python -m pytest tests/test_bootability.py -v
+      # Non-blocking: the rest of the backend suite. 10 pre-existing failures
+      # date from when auth was added to the endpoints — these tests override
+      # get_task_repo but not get_current_user, so a real JWKS lookup rejects
+      # their fake token with 401. Tracked separately; `continue-on-error`
+      # keeps them reported without letting a known-failing baseline mask a
+      # new regression. Remove this step once that baseline is green.
+      - run: python -m pytest -v
+        continue-on-error: true
+
   frontend:
     runs-on: ubuntu-latest
     defaults:

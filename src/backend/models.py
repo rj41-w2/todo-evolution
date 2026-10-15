@@ -8,9 +8,14 @@ from pydantic import BaseModel, Field
 
 from database import Base
 
-# Import user stub from repositories to register FK target in metadata.
-# See repositories/user_stub.py for documentation of this external seam.
-from repositories.user_stub import user  # noqa: F401
+# Import the `user` stub to register the FK target in metadata.
+# See user_stub.py for documentation of this external seam.
+#
+# This module lives at the backend root, NOT under `repositories/`, on purpose:
+# `repositories/*` imports `models`, so importing anything from that package
+# here would create a circular import and break `import main` entirely. The
+# stub only needs `database`, which keeps this edge one-way: models -> stub.
+import user_stub  # noqa: F401  registers `user` on Base.metadata
 
 class PriorityEnum(str, Enum):
     LOW = "Low"

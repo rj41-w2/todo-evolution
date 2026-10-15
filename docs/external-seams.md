@@ -20,7 +20,7 @@ This document defines formal contracts for database tables **owned by external s
 | `createdAt` | `DateTime` | Not used by backend |
 | `updatedAt` | `DateTime` | Not used by backend |
 
-**Minimal stub in backend metadata** (`src/backend/repositories/user_stub.py`):
+**Minimal stub in backend metadata** (`src/backend/user_stub.py`):
 ```python
 Table("user", Base.metadata, Column("id", String, primary_key=True))
 ```
@@ -66,7 +66,7 @@ FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 
 If backend ever references another external table:
 
-1. Create a stub in `repositories/{table}_stub.py` with docs.
+1. Create a stub at the backend root as `{table}_stub.py` with docs. **Not** under `repositories/` — those modules import `models`, so a stub imported from there creates a circular import that stops the API from booting (see issue #1).
 2. Add to `migrations/env.py` `BETTER_AUTH_TABLES` (or new exclusion set).
 3. Add entry here with same sections: Owner, Schema Assumptions, FK Behavior, Change Protocol.
 4. Add startup check + integration test.
