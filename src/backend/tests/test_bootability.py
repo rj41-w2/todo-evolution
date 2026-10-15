@@ -4,7 +4,7 @@ Guards the import graph at the two seams that took the whole backend down
 (issue #1):
 
 * a circular import between `models` and `repositories`, and
-* a missing runtime module in the MCP container image.
+* a missing runtime module in the backend image.
 
 These tests are hermetic by design — no database connection, no network, no
 credentials. They assert that the services *start*, not that they work.
@@ -55,9 +55,16 @@ def test_api_exposes_a_fastapi_app_with_routes():
     assert len(main.app.routes) > 0, "FastAPI app registered no routes"
 
 
-def test_mcp_registers_every_tool():
+def test_mcp_builds_a_server_with_every_tool():
+    """`build_server(user_id)` must produce a server carrying all five tools.
+
+    There is no module-level `mcp` any more: identity is a construction
+    argument, so there is nothing to register tools onto until a caller supplies
+    one. See `tests/test_mcp_authz.py` for why.
+    """
     mcp_server = importlib.import_module("mcp_server")
-    registered = set(mcp_server.mcp._tool_manager._tools)
+    server = mcp_server.build_server("bootability-check-user")
+    registered = set(server._tool_manager._tools)
     missing = [name for name in MCP_TOOLS if name not in registered]
     assert not missing, f"MCP tools not registered: {missing}"
 
@@ -107,13 +114,25 @@ def test_api_boots_without_an_llm_key():
     )
 
 
-def test_mcp_container_copies_every_first_party_module_it_imports():
-    """`Dockerfile.mcp` must ship every local module `mcp_server.py` needs."""
-    dockerfile = (BACKEND_DIR / "Dockerfile.mcp").read_text()
+def test_backend_image_ships_the_mcp_tool_server():
+    """The backend image must carry `mcp_server.py` and everything it imports.
+
+    This replaced a guard on `Dockerfile.mcp`. The MCP server is no longer a
+    separate service with its own image — it is a stdio subprocess of the API,
+    so what matters is that the one backend image can serve it. Both files do
+    `COPY . .`, which covers `repositories/` and `user_stub.py` transitively.
+    """
+    dockerfile = (BACKEND_DIR / "Dockerfile").read_text()
 
     mcp_server = (BACKEND_DIR / "mcp_server.py").read_text()
     # `database`, `models` and `repositories` are the first-party imports here.
     assert "from repositories import SqlTaskRepository" in mcp_server
 
-    for required in ("mcp_server.py", "models.py", "database.py", "repositories/"):
-        assert required in dockerfile, f"Dockerfile.mcp does not copy {required}"
+    assert "COPY . ." in dockerfile, (
+        "backend Dockerfile must copy the whole source tree, or the stdio MCP "
+        "subprocess cannot be spawned from inside the container"
+    )
+    assert not (BACKEND_DIR / "Dockerfile.mcp").exists(), (
+        "Dockerfile.mcp is gone — it existed only to run the SSE service that "
+        "published port 8001 without auth"
+    )

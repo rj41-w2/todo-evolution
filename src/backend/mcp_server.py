@@ -1,18 +1,38 @@
-from mcp.server.fastmcp import FastMCP
-import uuid
-from typing import List, Optional
+"""MCP task tools, served over stdio with identity bound by the parent process.
+
+This module used to expose a module-level `FastMCP` server whose five tools all
+took `user_id` as their first argument, served unauthenticated over SSE on
+0.0.0.0:8001. Any caller could therefore name any identity (issue #2).
+
+Both halves are gone. Identity is a *construction argument*, captured by
+closure, so it is decided by whoever builds the server — in practice `main.py`,
+after verifying the caller's JWT — and never by the caller of a tool. The server
+speaks stdio over a pipe to that parent, so there is no port and no credential
+to present.
+
+Do not reintroduce a `user_id` tool parameter, and do not reintroduce a network
+transport. Both were the vulnerability.
+"""
+
+import os
 import json
-from datetime import datetime, timezone
+from datetime import datetime
+
+from mcp.server.fastmcp import FastMCP
 
 from database import SessionLocal
 from models import Task, StatusEnum, PriorityEnum
 from repositories import SqlTaskRepository
 
-mcp = FastMCP("TodoMCP")
+#: Environment variable carrying the authenticated user's id from the spawning
+#: process into this one. Set by `main.py` from the JWT-verified subject.
+IDENTITY_ENV_VAR = "MCP_USER_ID"
+
 
 def _get_task_repo() -> SqlTaskRepository:
     """Get a task repository with a new session."""
     return SqlTaskRepository(SessionLocal())
+
 
 def parse_due_date(value: str | None):
     if not value:
@@ -22,250 +42,247 @@ def parse_due_date(value: str | None):
     except ValueError as exc:
         raise ValueError("due_date must be a valid ISO-8601 datetime") from exc
 
-@mcp.tool()
-def add_task(
-    user_id: str,
-    title: str,
-    description: str = None,
-    priority: str = None,
-    tags: list[str] = None,
-    due_date: str = None
-) -> str:
-    """Create a new todo task.
-    
-    Args:
-        user_id: The authenticated user's ID.
-        title: The title of the task.
-        description: An optional description.
-        priority: Optional priority ("Low", "Medium", "High").
-        tags: Optional list of tags.
-        due_date: Optional ISO-8601 formatted datetime string for the task deadline (e.g. "2026-07-01T15:00:00Z").
+
+def build_server(user_id: str | None) -> FastMCP:
+    """Build a FastMCP server whose every tool acts as `user_id`.
+
+    `user_id` is captured in the closure, not taken from the call. That is the
+    whole point: identity is decided here, at construction, and the resulting
+    tool schemas contain no identity parameter for a caller to forge.
+
+    Raises RuntimeError when `user_id` is missing or blank. There is
+    deliberately no anonymous fallback — a server that served tasks for nobody
+    in particular would be a server that served everyone's.
     """
-    if not title or not title.strip():
-        raise ValueError("title is required")
+    if not user_id or not user_id.strip():
+        raise RuntimeError(
+            "MCP server requires an authenticated identity. Pass user_id to "
+            "build_server(), or set "
+            f"{IDENTITY_ENV_VAR} in the environment when running this module "
+            "directly."
+        )
 
-    repo = _get_task_repo()
-    try:
-        p_enum = PriorityEnum.MEDIUM
-        if priority:
-            if priority.lower() == "low":
-                p_enum = PriorityEnum.LOW
-            elif priority.lower() == "medium":
-                p_enum = PriorityEnum.MEDIUM
-            elif priority.lower() == "high":
-                p_enum = PriorityEnum.HIGH
+    identity = user_id.strip()
+    mcp = FastMCP("TodoMCP")
 
-        parsed_due_date = parse_due_date(due_date)
+    @mcp.tool()
+    def add_task(
+        title: str,
+        description: str = None,
+        priority: str = None,
+        tags: list[str] = None,
+        due_date: str = None
+    ) -> str:
+        """Create a new todo task for the authenticated user.
 
-        task_data = {
-            "user_id": user_id,
-            "title": title,
-            "description": description,
-            "priority": p_enum,
-            "tags": tags or [],
-            "due_date": parsed_due_date,
-            "status": StatusEnum.PENDING
-        }
-        db_task = Task(**task_data)
-        repo.create(db_task)
-        repo.session.commit()
-        return json.dumps({
-            "task_id": str(db_task.id),
-            "status": "created",
-            "title": db_task.title
-        })
-    finally:
-        repo.session.close()
+        Args:
+            title: The title of the task.
+            description: An optional description.
+            priority: Optional priority ("Low", "Medium", "High").
+            tags: Optional list of tags.
+            due_date: Optional ISO-8601 formatted datetime string for the task deadline (e.g. "2026-07-01T15:00:00Z").
+        """
+        if not title or not title.strip():
+            raise ValueError("title is required")
 
-@mcp.tool()
-def list_tasks(
-    user_id: str,
-    status: str = None,
-    priority: str = None
-) -> str:
-    """Fetch tasks with optional status and priority filters.
-    
-    Args:
-        user_id: The authenticated user's ID.
-        status: Optional status ("all", "pending", "completed").
-        priority: Optional priority ("Low", "Medium", "High").
-    """
-    repo = _get_task_repo()
-    try:
-        status_enum = None
-        if status and status.lower() != "all":
-            if status.lower() == "completed":
-                status_enum = StatusEnum.COMPLETED
-            elif status.lower() == "pending":
-                status_enum = StatusEnum.PENDING
-                
-        priority_enum = None
-        if priority:
-            if priority.lower() == "low":
-                priority_enum = PriorityEnum.LOW
-            elif priority.lower() == "medium":
-                priority_enum = PriorityEnum.MEDIUM
-            elif priority.lower() == "high":
-                priority_enum = PriorityEnum.HIGH
-        
-        tasks = repo.list_by_user(user_id, status_enum, priority_enum)
-        result = [
-            {
-                "task_id": str(t.id),
-                "title": t.title,
-                "description": t.description,
-                "status": t.status.value,
-                "priority": t.priority.value,
-                "tags": t.tags,
-                "created_at": t.created_at.isoformat() if t.created_at else None,
-                "due_date": t.due_date.isoformat() if t.due_date else None
+        repo = _get_task_repo()
+        try:
+            p_enum = PriorityEnum.MEDIUM
+            if priority:
+                if priority.lower() == "low":
+                    p_enum = PriorityEnum.LOW
+                elif priority.lower() == "medium":
+                    p_enum = PriorityEnum.MEDIUM
+                elif priority.lower() == "high":
+                    p_enum = PriorityEnum.HIGH
+
+            parsed_due_date = parse_due_date(due_date)
+
+            task_data = {
+                "user_id": identity,
+                "title": title,
+                "description": description,
+                "priority": p_enum,
+                "tags": tags or [],
+                "due_date": parsed_due_date,
+                "status": StatusEnum.PENDING
             }
-            for t in tasks
-        ]
-        return json.dumps(result)
-    finally:
-        repo.session.close()
+            db_task = Task(**task_data)
+            repo.create(db_task)
+            repo.session.commit()
+            return json.dumps({
+                "task_id": str(db_task.id),
+                "status": "created",
+                "title": db_task.title
+            })
+        finally:
+            repo.session.close()
 
-@mcp.tool()
-def complete_task(
-    user_id: str,
-    task_id: str
-) -> str:
-    """Mark a task as completed.
-    
-    Args:
-        user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to complete, OR the task title name.
-    """
-    repo = _get_task_repo()
-    try:
-        db_task = repo.find_by_id_or_title(user_id, task_id)
-            
-        if not db_task:
-            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
-            
-        db_task.status = StatusEnum.COMPLETED
-        repo.update(db_task)
-        repo.session.commit()
-        return json.dumps({
-            "task_id": str(db_task.id),
-            "status": "completed",
-            "title": db_task.title
-        })
-    finally:
-        repo.session.close()
+    @mcp.tool()
+    def list_tasks(
+        status: str = None,
+        priority: str = None
+    ) -> str:
+        """Fetch the authenticated user's tasks with optional filters.
 
-@mcp.tool()
-def delete_task(
-    user_id: str,
-    task_id: str
-) -> str:
-    """Delete an existing task.
-    
-    Args:
-        user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to delete, OR the task title name.
-    """
-    repo = _get_task_repo()
-    try:
-        db_task = repo.find_by_id_or_title(user_id, task_id)
-            
-        if not db_task:
-            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
-            
-        repo.delete(db_task)
-        repo.session.commit()
-        return json.dumps({
-            "task_id": str(db_task.id),
-            "status": "deleted",
-            "title": db_task.title
-        })
-    finally:
-        repo.session.close()
+        Args:
+            status: Optional status ("all", "pending", "completed").
+            priority: Optional priority ("Low", "Medium", "High").
+        """
+        repo = _get_task_repo()
+        try:
+            status_enum = None
+            if status and status.lower() != "all":
+                if status.lower() == "completed":
+                    status_enum = StatusEnum.COMPLETED
+                elif status.lower() == "pending":
+                    status_enum = StatusEnum.PENDING
 
-@mcp.tool()
-def update_task(
-    user_id: str,
-    task_id: str,
-    title: str = None,
-    description: str = None,
-    priority: str = None,
-    due_date: str = None
-) -> str:
-    """Update an existing task's title, description, priority, or due date.
-    
-    Args:
-        user_id: The authenticated user's ID.
-        task_id: The UUID string of the task to update, OR the task title name.
-        title: Optional new title.
-        description: Optional new description.
-        priority: Optional new priority ("Low", "Medium", "High").
-        due_date: Optional ISO-8601 formatted datetime string for the new task deadline.
+            priority_enum = None
+            if priority:
+                if priority.lower() == "low":
+                    priority_enum = PriorityEnum.LOW
+                elif priority.lower() == "medium":
+                    priority_enum = PriorityEnum.MEDIUM
+                elif priority.lower() == "high":
+                    priority_enum = PriorityEnum.HIGH
+
+            tasks = repo.list_by_user(identity, status_enum, priority_enum)
+            result = [
+                {
+                    "task_id": str(t.id),
+                    "title": t.title,
+                    "description": t.description,
+                    "status": t.status.value,
+                    "priority": t.priority.value,
+                    "tags": t.tags,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                    "due_date": t.due_date.isoformat() if t.due_date else None
+                }
+                for t in tasks
+            ]
+            return json.dumps(result)
+        finally:
+            repo.session.close()
+
+    @mcp.tool()
+    def complete_task(
+        task_id: str
+    ) -> str:
+        """Mark one of the authenticated user's tasks as completed.
+
+        Args:
+            task_id: The UUID string of the task to complete, OR the task title name.
+        """
+        repo = _get_task_repo()
+        try:
+            db_task = repo.find_by_id_or_title(identity, task_id)
+
+            if not db_task:
+                raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
+
+            db_task.status = StatusEnum.COMPLETED
+            repo.update(db_task)
+            repo.session.commit()
+            return json.dumps({
+                "task_id": str(db_task.id),
+                "status": "completed",
+                "title": db_task.title
+            })
+        finally:
+            repo.session.close()
+
+    @mcp.tool()
+    def delete_task(
+        task_id: str
+    ) -> str:
+        """Delete one of the authenticated user's tasks.
+
+        Args:
+            task_id: The UUID string of the task to delete, OR the task title name.
+        """
+        repo = _get_task_repo()
+        try:
+            db_task = repo.find_by_id_or_title(identity, task_id)
+
+            if not db_task:
+                raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
+
+            repo.delete(db_task)
+            repo.session.commit()
+            return json.dumps({
+                "task_id": str(db_task.id),
+                "status": "deleted",
+                "title": db_task.title
+            })
+        finally:
+            repo.session.close()
+
+    @mcp.tool()
+    def update_task(
+        task_id: str,
+        title: str = None,
+        description: str = None,
+        priority: str = None,
+        due_date: str = None
+    ) -> str:
+        """Update one of the authenticated user's tasks.
+
+        Args:
+            task_id: The UUID string of the task to update, OR the task title name.
+            title: Optional new title.
+            description: Optional new description.
+            priority: Optional priority ("Low", "Medium", "High").
+            due_date: Optional ISO-8601 formatted datetime string for the new task deadline.
+        """
+        repo = _get_task_repo()
+        try:
+            db_task = repo.find_by_id_or_title(identity, task_id)
+
+            if not db_task:
+                raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
+
+            if title is not None:
+                if not title.strip():
+                    raise ValueError("title cannot be empty")
+                db_task.title = title
+            if description is not None:
+                db_task.description = description
+            if priority is not None:
+                p_enum = None
+                if priority.lower() == "low":
+                    p_enum = PriorityEnum.LOW
+                elif priority.lower() == "medium":
+                    p_enum = PriorityEnum.MEDIUM
+                elif priority.lower() == "high":
+                    p_enum = PriorityEnum.HIGH
+                if p_enum:
+                    db_task.priority = p_enum
+
+            if due_date is not None:
+                db_task.due_date = parse_due_date(due_date)
+
+            repo.update(db_task)
+            repo.session.commit()
+            return json.dumps({
+                "task_id": str(db_task.id),
+                "status": "updated",
+                "title": db_task.title
+            })
+        finally:
+            repo.session.close()
+
+    return mcp
+
+
+def main() -> None:
+    """Serve the tools over stdio, bound to the identity we were given.
+
+    Runs once per chat request: `main.py` spawns this as a subprocess, sets
+    `MCP_USER_ID` to the JWT-verified subject, and tears it down afterwards.
     """
-    repo = _get_task_repo()
-    try:
-        db_task = repo.find_by_id_or_title(user_id, task_id)
-            
-        if not db_task:
-            raise ValueError(f"Task not found with ID or name matching '{task_id}'.")
-            
-        if title is not None:
-            if not title.strip():
-                raise ValueError("title cannot be empty")
-            db_task.title = title
-        if description is not None:
-            db_task.description = description
-        if priority is not None:
-            p_enum = None
-            if priority.lower() == "low":
-                p_enum = PriorityEnum.LOW
-            elif priority.lower() == "medium":
-                p_enum = PriorityEnum.MEDIUM
-            elif priority.lower() == "high":
-                p_enum = PriorityEnum.HIGH
-            if p_enum:
-                db_task.priority = p_enum
-        
-        if due_date is not None:
-            db_task.due_date = parse_due_date(due_date)
-                
-        repo.update(db_task)
-        repo.session.commit()
-        return json.dumps({
-            "task_id": str(db_task.id),
-            "status": "updated",
-            "title": db_task.title
-        })
-    finally:
-        repo.session.close()
+    build_server(os.environ.get(IDENTITY_ENV_VAR)).run(transport="stdio")
+
 
 if __name__ == "__main__":
-    import os
-    transport = os.getenv("MCP_TRANSPORT", "stdio")
-    if transport == "sse":
-        # For SSE, use uvicorn directly to control host/port
-        import uvicorn
-        from mcp.server.sse import SseServerTransport
-        from starlette.applications import Starlette
-        from starlette.routing import Route, Mount
-        
-        sse = SseServerTransport("/messages/")
-        
-        async def handle_sse(request):
-            async with sse.connect_sse(
-                request.scope, request.receive, request._send
-            ) as streams:
-                await mcp._mcp_server.run(
-                    streams[0], streams[1], mcp._mcp_server.create_initialization_options()
-                )
-        
-        starlette_app = Starlette(
-            routes=[
-                Route("/sse", handle_sse),
-                Mount("/messages/", app=sse.handle_post_message),
-            ]
-        )
-        
-        uvicorn.run(starlette_app, host="0.0.0.0", port=8001)
-    else:
-        mcp.run()
+    main()

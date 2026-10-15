@@ -15,6 +15,10 @@ services:
     networks:
       - todo-network
 
+  # The MCP task tools are NOT a service. They run as a stdio subprocess of
+  # /api/{user_id}/chat, spawned per request and bound to the JWT-verified user.
+  # They used to be a standalone SSE service published on 8001 with no auth, and
+  # every tool took user_id as an argument — see src/backend/mcp_server.py.
   backend:
     build:
       context: ./src/backend
@@ -26,24 +30,9 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - JWKS_URL=${JWKS_URL:-http://frontend:3000/api/auth/jwks}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
-      - MCP_SERVER_URL=http://mcp:8001/sse
     depends_on:
       auth-migrate:
         condition: service_completed_successfully
-      mcp:
-        condition: service_started
-    networks:
-      - todo-network
-
-  mcp:
-    build:
-      context: ./src/backend
-      dockerfile: Dockerfile.mcp
-    ports:
-      - "8001:8001"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - MCP_TRANSPORT=sse
     networks:
       - todo-network
 

@@ -30,6 +30,11 @@ jobs:
       # Hard gate: the API and MCP services must boot from a cold interpreter.
       # This is the step that catches an import/startup regression (issue #1).
       - run: python -m pytest tests/test_bootability.py -v
+      # Hard gate: task tenancy at the MCP tool layer (issue #2). Deliberately
+      # NOT continue-on-error. The bug this guards was a silent cross-tenant
+      # read/write, and a non-blocking step would have hidden exactly that: the
+      # tests were never written, so nothing was ever red to notice.
+      - run: python -m pytest tests/test_mcp_authz.py -v
       # Non-blocking: the rest of the backend suite. 10 pre-existing failures
       # date from when auth was added to the endpoints — these tests override
       # get_task_repo but not get_current_user, so a real JWKS lookup rejects

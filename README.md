@@ -58,7 +58,7 @@ todo-evolution/
 │       ├── main.py         # FastAPI application
 │       ├── models.py       # SQLAlchemy + Pydantic models
 │       ├── database.py     # Engine & session config
-│       ├── mcp_server.py   # MCP tool definitions (stdio)
+│       ├── mcp_server.py   # MCP tool definitions (stdio, identity bound by parent)
 │       └── requirements.txt
 ├── frontend/
 │   ├── app/                # Next.js App Router pages

@@ -1,7 +1,9 @@
 import os
+import sys
 import uuid
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +17,8 @@ from jwt import PyJWKClient
 
 import json
 import openai
-from mcp import ClientSession
-from mcp.client.sse import sse_client
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
 
 from database import get_db
 from models import (
@@ -31,6 +33,11 @@ from repositories import (
 
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
 # the app starts. See src/backend/migrations/.
+
+# The MCP tool server, spawned as a stdio subprocess per chat request. Resolved
+# next to this module so it is the same file in a local checkout and inside the
+# backend image — `Dockerfile` does `COPY . .`, so no separate image is needed.
+MCP_SERVER_SCRIPT = Path(__file__).resolve().parent / "mcp_server.py"
 
 # OpenAI client singleton (Issue 7), built lazily.
 #
@@ -315,10 +322,27 @@ Guidelines:
     executed_tools = []
     response_text = None
 
-    mcp_server_url = os.getenv("MCP_SERVER_URL", "http://mcp:8001/sse")
+    # The MCP tool server runs as a stdio subprocess of this request, bound to
+    # the identity we already verified from the JWT above. stdio is the only
+    # shape this uses: there is no port to publish and no unauthenticated
+    # network surface. See mcp_server.build_server for why identity cannot be
+    # passed as a tool argument any more.
+    mcp_server_params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(MCP_SERVER_SCRIPT)],
+        cwd=str(MCP_SERVER_SCRIPT.parent),
+        env={
+            # stdio_client merges this over a safe default subset that does NOT
+            # include DATABASE_URL, so the child needs it passed explicitly or
+            # it dies in database.py at import.
+            "DATABASE_URL": os.environ["DATABASE_URL"],
+            # The authenticated subject, and the only identity the child has.
+            "MCP_USER_ID": user_id,
+        },
+    )
 
     try:
-        async with sse_client(mcp_server_url) as (read, write):
+        async with stdio_client(mcp_server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 
@@ -335,13 +359,6 @@ Guidelines:
                         }
                     })
 
-                # Remove user_id from parameters since the agent doesn't provide it
-                for t in openai_tools:
-                    if "user_id" in t["function"]["parameters"].get("properties", {}):
-                        del t["function"]["parameters"]["properties"]["user_id"]
-                    if "user_id" in t["function"]["parameters"].get("required", []):
-                        t["function"]["parameters"]["required"].remove("user_id")
-
                 response = await client.chat.completions.create(
                     model="gemini-1.5-flash-latest",
                     messages=openai_history,
@@ -357,9 +374,6 @@ Guidelines:
                     for tool_call in response_message.tool_calls:
                         tool_name = tool_call.function.name
                         tool_args = json.loads(tool_call.function.arguments)
-                        
-                        # Inject user_id securely before passing to MCP
-                        tool_args["user_id"] = user_id
                         
                         result = await session.call_tool(tool_name, arguments=tool_args)
                         tool_result_str = result.content[0].text if result.content else "{}"
