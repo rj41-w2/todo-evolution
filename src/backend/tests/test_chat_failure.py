@@ -37,7 +37,7 @@ ALICE = "test-chat-alice"
 
 
 @pytest.fixture
-def alice():
+def alice(monkeypatch):
     """A real row in Better Auth's `user` table so the FKs hold."""
     with engine.begin() as conn:
         conn.execute(
@@ -49,6 +49,13 @@ def alice():
             ),
             {"id": ALICE, "name": ALICE, "email": "alice-chat@test.invalid"},
         )
+
+    # The route refuses to start without a key, before it does any work at all.
+    # Without this the test passes locally off an untracked `.env` and fails in
+    # CI for the wrong reason — and worse, it would be asserting that nothing
+    # was persisted when the route had never reached the database.
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
+
     app.dependency_overrides[get_current_user] = lambda: ALICE
     try:
         yield TestClient(app)
