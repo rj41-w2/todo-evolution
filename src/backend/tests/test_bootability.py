@@ -88,6 +88,54 @@ def test_alembic_chain_generates_ddl_without_a_database():
     command.upgrade(config, "head", sql=True)
 
 
+def test_alembic_chain_committed_here_is_sound():
+    """The chain in this repository must be linear, rooted, and fully reachable.
+
+    What this catches: a branch that was never merged, a `down_revision`
+    pointing at a revision that does not exist, two files claiming the same
+    revision id, and a stray file in `versions/` that nothing builds on.
+
+    What this deliberately does NOT catch, and why it is worth saying out loud:
+    a database stamped with a revision id that was never committed. That
+    pointer lives in the database, where this repository has no trace of it
+    whatsoever — not in git, not in a file, not in a cache. That is precisely
+    why the `alembic upgrade head --sql` check above stayed green while a
+    live database sat on an orphan revision and the backend refused to boot
+    (issue #10). The guard for that case needs a database, and lives in
+    `test_migration_drift.py`.
+    """
+    from _migration_chain import read_chain
+
+    chain = read_chain()
+    assert chain.revisions, (
+        f"no revisions parsed from {BACKEND_DIR / 'migrations' / 'versions'} — "
+        "the migration directory is empty or unreadable"
+    )
+
+    assert not chain.dangling, (
+        "revisions point at a parent that does not exist in this repo: "
+        f"{chain.dangling}"
+    )
+
+    assert len(chain.heads) == 1, (
+        "expected exactly one head (a linear chain), found "
+        f"{sorted(chain.heads)} — two heads means an unmerged branch"
+    )
+
+    assert len(chain.revisions) == len(chain.files), (
+        "two migration files claim the same revision id"
+    )
+
+    head = next(iter(chain.heads))
+    reachable = chain.reachable_from(head)
+    unreachable = set(chain.revisions) - reachable
+    assert not unreachable, (
+        f"revisions unreachable from head {head!r}: "
+        f"{ {r: chain.files[r] for r in sorted(unreachable)} } — "
+        "a migration file exists that the chain does not include"
+    )
+
+
 def test_api_boots_without_an_llm_key():
     """A missing GEMINI_API_KEY must not take the whole API down.
 
