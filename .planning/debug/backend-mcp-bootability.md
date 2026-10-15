@@ -69,17 +69,33 @@ Applied Option B (stub moved out of the data-access layer), per user decision:
 
 Bootability test was written first and failed 7/7 before the fix, 8/8 after.
 
+### First CI run caught a real gap
+
+The first push of the gate went **red**. `conftest.py` supplied only
+`DATABASE_URL`, so on a clean checkout `import main` hit `main.py:65` →
+`RuntimeError: CORS_ORIGINS must be configured`. Every local run had passed
+because `src/backend/.env` supplies `CORS_ORIGINS`, and that file is not
+tracked. This is precisely the failure mode the new CI job exists to catch —
+the gate worked on its first outing.
+
+`conftest.py` now supplies both variables the backend needs to import. The
+fail-fast checks in `database.py` and `main.py` are left intact; only the test
+environment is populated. Verified against a clean `git archive` checkout with
+no `.env`, on Python 3.10, before re-pushing.
+
 - [x] `cd src/backend && python -c "import main, mcp_server"` → `BOOT OK — routes: 12 | mcp tools: 5`
 - [x] `python -m pytest tests/test_bootability.py -q` → `8 passed`
-- [x] `python -m pytest -q` (full backend) → `10 failed, 13 passed, 5 deselected` — the 10 are pre-existing auth-stub failures, unchanged in count and out of scope
+- [x] Clean checkout (no `.env`), Python 3.10, CI commands verbatim → `8 passed`
+- [x] `python -m pytest -q` (full backend) → `10 failed, 13 passed, 5 deselected` — the 10 are pre-existing auth-stub failures, unchanged in count and out of scope (tracked as issue #9)
 - [x] Phase I `python -m unittest discover -s tests` → `Ran 3 tests ... OK` (untouched)
 - [x] `alembic upgrade head --sql` renders DDL offline; revision chain `0001 → 0002` intact
 - [x] `docker compose build` → all four images built (backend, mcp, frontend, auth-migrate)
 - [x] `docker run todo-evolution-mcp python -c "import mcp_server"` → `OK | tools: 5`
 - [x] `docker run todo-evolution-backend python -c "import main"` (no `GEMINI_API_KEY`) → `OK | routes: 12`
 - [x] `docker run todo-evolution-backend python -c "import main"` (full env) → `OK | routes: 12`
+- [x] MCP container live SSE handshake → `HTTP 200`, `text/event-stream`, `event: endpoint` with session id
 - [x] Neither image contains `.env`, `.venv` or `venv`
-- [ ] `docker compose up` + live `/sse` handshake and `alembic upgrade head` against a real database — NOT RUN: no reachable PostgreSQL/Neon instance in this environment
+- [ ] `docker compose up` end-to-end against Neon (`alembic upgrade head` on a real database, backend↔MCP integration, frontend) — NOT RUN: would mutate the live Neon database, so left to the owner.
 
 ## Out of Scope (follow-up needed)
 
