@@ -20,8 +20,12 @@ frontend/test-auth.js
 frontend/test-db.js
 skills-lock.json
 
+# GSD planning state — session logs and the knowledge base are local working
+# material, not part of the repository. Untracked them in #4; add here so the
+# removal survives a fresh clone.
+.planning/
+
 # Helm charts and secrets
 helm/
 .agents
 .scratch/
-FEATURE_TRACKER.md

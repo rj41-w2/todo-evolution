@@ -72,13 +72,13 @@ todo-evolution/
 │   └── test_manager.py
 ├── docker-compose.yml
 ├── .github/workflows/ci.yml
-├── TODO.md                 # Original roadmap & notes
+├── docs/TODO.md            # Original roadmap & notes
 └── README.md
 ```
 
 ## Design System
 
-The design contract lives in [`design.md`](design.md); the values live in
+The design contract lives in [`docs/design.md`](docs/design.md); the values live in
 `frontend/app/tokens.css`. Both are the single source of truth -- pages consume
 tokens, never raw colours.
 
@@ -186,7 +186,7 @@ npm test          # vitest
 - [x] Phase IV -- Docker containerization
 - [ ] Phase V -- Kubernetes/Helm deployment, mobile client, global scale
 
-See [TODO.md](TODO.md) for the original roadmap details.
+See [docs/TODO.md](docs/TODO.md) for the original roadmap details.
 
 ## License
 
