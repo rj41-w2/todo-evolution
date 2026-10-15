@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageSquare, Send, X, Sparkles, Check, Trash2,
-  Plus, Edit, List, Loader2
+  Plus, Edit, List, Loader2, AlertTriangle
 } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
@@ -177,11 +177,24 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
 
         // Create assistant message object
         const assistantMsgId = `assistant-${Date.now()}`;
+        // Issue #4: the status code no longer distinguishes a failed turn from
+        // a successful one, so the outcome has to be carried on the message.
+        // Without it a `partial` turn — a task created, one action failed —
+        // renders exactly like a clean success, and the user has no way to
+        // know something did not happen.
+        const failedTools = data.tool_calls
+          .filter((c) => c.ok === false)
+          .map((c) => c.tool);
         const assistantMsg: ChatMessage = {
           id: assistantMsgId,
           role: 'assistant',
           content: data.response,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          // `completed` is the common case and design.md asks for silent
+          // success, so it is left off rather than stored and ignored.
+          ...(data.outcome && data.outcome !== 'completed'
+            ? { outcome: data.outcome, failedTools }
+            : {}),
         };
 
         // Record tools executed
@@ -422,6 +435,31 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
                     </div>
 
                     {/* Render tool logs pills underneath response if any */}
+                    {/* Issue #4: a turn that did not fully succeed says so.
+                        design.md asks for silent success, so nothing is shown
+                        for `completed` — only the two states a user would
+                        otherwise misread as fine. `warn` for partial (some of
+                        it happened), `danger` for failed (none of it did). */}
+                    {msg.role === 'assistant' && msg.outcome && msg.outcome !== 'completed' && (
+                      <div
+                        role="status"
+                        className={`mt-2 ml-1 flex items-start gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-input)] text-[11px] leading-relaxed
+                          ${msg.outcome === 'failed'
+                            ? 'bg-danger-soft text-danger'
+                            : 'bg-warn-soft text-warn'}`}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                        <span>
+                          {msg.outcome === 'failed'
+                            ? 'Nothing was changed — the assistant could not complete this turn.'
+                            : 'Partly done — some actions did not complete.'}
+                          {msg.failedTools && msg.failedTools.length > 0 && (
+                            <> Failed: {msg.failedTools.join(', ')}.</>
+                          )}
+                        </span>
+                      </div>
+                    )}
+
                     {msg.role === 'assistant' && toolLogs[msg.id] && (
                       <div className="flex flex-wrap gap-1.5 mt-2 ml-1">
                         {toolLogs[msg.id].map((toolCall, idx) => (

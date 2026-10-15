@@ -43,6 +43,15 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  /**
+   * What the turn actually did, from issue #4. Absent on messages loaded from
+   * the server — the history endpoint does not store it — and absent on turns
+   * that fully succeeded. Renderers must treat `undefined` as "nothing to
+   * report", not as a failure.
+   */
+  outcome?: 'completed' | 'partial' | 'failed';
+  /** Tools that did not run, when the turn was partial. */
+  failedTools?: string[];
 }
 
 export interface ToolCall {
