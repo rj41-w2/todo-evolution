@@ -126,6 +126,25 @@ class TaskResponse(TaskBase):
     class Config:
         from_attributes = True
 
+class TaskListResponse(BaseModel):
+    """One page of tasks, plus where the next one starts.
+
+    Issue #7. The route answered a bare array before, which cannot express
+    "there is more" — so a client could either fetch everything or stop at an
+    arbitrary point.
+
+    Defined *after* `TaskResponse` on purpose. This module has no
+    `from __future__ import annotations`, so annotations are evaluated as the
+    class body executes. Python 3.14 defers them anyway (PEP 649), which is why
+    the forward reference below worked on a 3.14 dev machine and raised
+    `NameError` on 3.10 in the container, where it is actually deployed.
+    Nothing here should name a class defined further down.
+    """
+
+    tasks: List[TaskResponse] = []
+    #: None when this page is the last. Opaque; only pass it back.
+    next_cursor: Optional[str] = None
+
 class ChatRequest(BaseModel):
     conversation_id: Optional[uuid.UUID] = None
     message: str = Field(min_length=1, max_length=4000)

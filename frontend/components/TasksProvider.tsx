@@ -3,7 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
-import type { AuthUser, Task, TaskCreate, TaskUpdate, Status } from '../types';
+import type { AuthUser, Task, TaskCreate, TaskUpdate, Status, TaskListResponse } from '../types';
 
 interface TasksContextValue {
   tasks: Task[];
@@ -45,8 +45,11 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await secureFetch(`/api/${userId}/tasks`);
       if (res.ok) {
-        const data = await res.json();
-        setTasks(data);
+        const data: TaskListResponse = await res.json();
+        // Issue #7: the route answers with an envelope now. It also orders and
+        // bounds the read — the backend's order is the order on screen, since
+        // nothing here sorts.
+        setTasks(data.tasks);
       }
     } catch (error) {
       console.error('Failed to fetch tasks:', error);

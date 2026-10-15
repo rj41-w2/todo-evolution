@@ -43,6 +43,13 @@ def parse_due_date(value: str | None):
         raise ValueError("due_date must be a valid ISO-8601 datetime") from exc
 
 
+# How many tasks a single `list_tasks` call may return to the model.
+# Issue #7: unbounded here would put every task a user ever created into a
+# context window, and a model shown 50 of 300 will confidently report "you
+# have 50 tasks".
+MCP_TASK_PAGE_SIZE = 50
+
+
 def build_server(user_id: str | None) -> FastMCP:
     """Build a FastMCP server whose every tool acts as `user_id`.
 
@@ -63,6 +70,7 @@ def build_server(user_id: str | None) -> FastMCP:
         )
 
     identity = user_id.strip()
+
     mcp = FastMCP("TodoMCP")
 
     @mcp.tool()
@@ -147,7 +155,12 @@ def build_server(user_id: str | None) -> FastMCP:
                 elif priority.lower() == "high":
                     priority_enum = PriorityEnum.HIGH
 
-            tasks = repo.list_by_user(identity, status_enum, priority_enum)
+            # Bounded and ordered like the HTTP list route (issue #7). An
+            # unbounded read here would put every task a user ever created
+            # into a model's context window.
+            tasks, has_more = repo.list_page_by_user(
+                identity, status_enum, priority_enum, None, MCP_TASK_PAGE_SIZE
+            )
             result = [
                 {
                     "task_id": str(t.id),
@@ -161,6 +174,16 @@ def build_server(user_id: str | None) -> FastMCP:
                 }
                 for t in tasks
             ]
+            if has_more:
+                # Say so, rather than letting the model present a
+                # truncated list as a complete one.
+                result.append({
+                    "note": (
+                        f"More tasks match this filter than are shown here. "
+                        f"This call returned at most {MCP_TASK_PAGE_SIZE}. "
+                        f"Narrow the filter, or use the tasks endpoint to page."
+                    )
+                })
             return json.dumps(result)
         finally:
             repo.session.close()

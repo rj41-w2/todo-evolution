@@ -27,6 +27,19 @@ export interface TaskCreate {
   due_date?: string;
 }
 
+/**
+ * The task list route's response (issue #7).
+ *
+ * It was a bare array, which cannot express "there is more" — so a client
+ * either fetched everything or stopped at an arbitrary point. The backend now
+ * orders and bounds the read; `next_cursor` is how a client continues.
+ */
+export interface TaskListResponse {
+  tasks: Task[];
+  /** Opaque. Pass it back verbatim as `?cursor=`. null on the last page. */
+  next_cursor: string | null;
+}
+
 export interface TaskUpdate {
   title?: string;
   // `null` clears the field: the API's `TaskUpdate` is `Optional[...] = None`

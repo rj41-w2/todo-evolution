@@ -21,9 +21,10 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from database import get_db, SessionLocal
+from paging import InvalidCursor, clamp_limit, decode_cursor, encode_cursor
 from models import (
     Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
-    Conversation, Message, ChatRequest, ChatResponse,
+    Conversation, Message, ChatRequest, ChatResponse, TaskListResponse,
     ConversationSummary, ConversationListResponse, MessageOut,
     ConversationMessagesResponse,
 )
@@ -270,21 +271,52 @@ def create_task(
     db_task = Task(**task_data)
     return task_repo.create(db_task)
 
-@app.get("/api/{user_id}/tasks", response_model=List[TaskResponse])
+@app.get("/api/{user_id}/tasks", response_model=TaskListResponse)
 def get_tasks(
     user_id: str,
-    status: Optional[StatusEnum] = None, 
+    status: Optional[StatusEnum] = None,
     priority: Optional[PriorityEnum] = None,
+    limit: Optional[int] = None,
+    cursor: Optional[str] = None,
     authenticated_user_id: str = Depends(get_current_user),
     task_repo: TaskRepository = Depends(get_task_repo),
 ):
+    """One page of a user's tasks, newest first.
+
+    Issue #7. This used to answer a bare array with no ordering and no bound:
+    every task a user had ever created came back at once, in whatever order
+    the query plan produced. The client does not sort, so that order *was* the
+    order on screen.
+
+    Keyset paging rather than `OFFSET` — see `paging.py` for why an offset
+    repeats and skips rows when anything is written mid-walk.
+    """
     if authenticated_user_id != user_id:
         raise HTTPException(
-            status_code=http_status.HTTP_403_FORBIDDEN, 
+            status_code=http_status.HTTP_403_FORBIDDEN,
             detail="Access denied: You cannot manage resources of another identity"
         )
-        
-    return task_repo.list_by_user(user_id, status, priority)
+
+    try:
+        page_size = clamp_limit(limit)
+        after = decode_cursor(cursor) if cursor else None
+    except InvalidCursor as exc:
+        # 400, not a silent restart. Ignoring a bad cursor begins the walk
+        # again, which the caller cannot distinguish from a fresh request.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    rows, has_more = task_repo.list_page_by_user(
+        user_id, status, priority, after, page_size
+    )
+
+    next_cursor = None
+    if has_more and rows:
+        next_cursor = encode_cursor((rows[-1].created_at, rows[-1].id))
+
+    return TaskListResponse(
+        tasks=[TaskResponse.model_validate(t) for t in rows],
+        next_cursor=next_cursor,
+    )
 
 @app.get("/api/{user_id}/tasks/{task_id}", response_model=TaskResponse)
 def get_task(

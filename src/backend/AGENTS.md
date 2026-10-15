@@ -70,6 +70,14 @@ only `messages.role` and `messages.content`, not the outcome or the tool calls.
 string with no `Z` — which JavaScript reads as *local* time. Every overdue check
 was out by the reader's offset.
 
+**A Pydantic schema may only name classes defined above it.** The dev box runs
+Python 3.14, the image runs 3.10. 3.14 implements PEP 649, so annotations are
+deferred and a forward reference silently works locally; on 3.10 the same
+expression is evaluated while the class body executes and the app dies at import
+with a `NameError` that never appears locally. `TaskListResponse` did exactly
+this. Only the container runs catch it — which is why `backend-integration`
+builds the production image rather than trusting a passing local suite.
+
 **Migrations pin `SET LOCAL TimeZone = 'UTC'`** in both directions.
 `timestamp` ↔ `timestamptz` conversion is interpreted at the *session* timezone,
 so on a server not set to UTC every timestamp shifts silently.
@@ -98,6 +106,7 @@ Anything claiming a row exists must read it back through a fresh session.
 | `test_conversation_lifecycle.py` | new chat is new; resume appends; concurrency holds identity | yes |
 | `test_persistence_invariants.py` | the database refuses what it should | yes |
 | `test_conversation_listing.py` | conversations are findable and owner-scoped | yes |
+| `test_retrieval_scaling.py` | task reads are ordered, bounded, paged, and index-served | yes |
 | `test_migration_drift.py` | the database sits on a revision this repo knows | yes |
 
 Each was written to fail against the code it replaced before being trusted. A

@@ -15,7 +15,7 @@ client = TestClient(app)
 
 
 def test_get_tasks_uses_repository_not_session(auth_as_tenant):
-    """Proof-of-concept: endpoint calls TaskRepository.list_by_user, not db.query()."""
+    """Proof-of-concept: endpoint calls TaskRepository.list_page_by_user, not db.query()."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_task = Task(
         id=uuid4(),
@@ -28,7 +28,7 @@ def test_get_tasks_uses_repository_not_session(auth_as_tenant):
         created_at="2026-01-01T00:00:00Z",
         due_date=None,
     )
-    mock_repo.list_by_user.return_value = [mock_task]
+    mock_repo.list_page_by_user.return_value = ([mock_task], False)
 
     # Override the dependency
     from main import get_task_repo
@@ -41,11 +41,15 @@ def test_get_tasks_uses_repository_not_session(auth_as_tenant):
         )
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["title"] == "Test Task"
+        # Issue #7: the route answers with an envelope so a client can page.
+        assert len(data["tasks"]) == 1
+        assert data["tasks"][0]["title"] == "Test Task"
 
-        # Verify repository was called, not raw Session
-        mock_repo.list_by_user.assert_called_once_with("test-user", None, None)
+        # Verify the repository was called, not the raw Session. The positional
+        # filter arguments are unchanged; `after` and `limit` were added for
+        # paging, so they are asserted rather than assumed.
+        args, kwargs = mock_repo.list_page_by_user.call_args
+        assert args[:3] == ("test-user", None, None), mock_repo.list_page_by_user.call_args
     finally:
         app.dependency_overrides.clear()
 
@@ -53,7 +57,7 @@ def test_get_tasks_uses_repository_not_session(auth_as_tenant):
 def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
     """Repository receives filter params correctly."""
     mock_repo = MagicMock(spec=TaskRepository)
-    mock_repo.list_by_user.return_value = []
+    mock_repo.list_page_by_user.return_value = ([], False)
 
     from main import get_task_repo
     app.dependency_overrides[get_task_repo] = lambda: mock_repo
@@ -64,9 +68,9 @@ def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
             headers={"Authorization": "Bearer fake-token"},
         )
         assert response.status_code == 200
-        mock_repo.list_by_user.assert_called_once_with(
-            "test-user", StatusEnum.COMPLETED, PriorityEnum.HIGH
-        )
+        mock_repo.list_page_by_user.assert_called_once()
+        args, _ = mock_repo.list_page_by_user.call_args
+        assert args[:3] == ("test-user", StatusEnum.COMPLETED, PriorityEnum.HIGH)
     finally:
         app.dependency_overrides.clear()
 
@@ -74,7 +78,7 @@ def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
 def test_get_tasks_returns_empty_list_when_no_tasks(auth_as_tenant):
     """Empty result from repository returns empty list."""
     mock_repo = MagicMock(spec=TaskRepository)
-    mock_repo.list_by_user.return_value = []
+    mock_repo.list_page_by_user.return_value = ([], False)
 
     from main import get_task_repo
     app.dependency_overrides[get_task_repo] = lambda: mock_repo
@@ -85,6 +89,6 @@ def test_get_tasks_returns_empty_list_when_no_tasks(auth_as_tenant):
             headers={"Authorization": "Bearer fake-token"},
         )
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json()["tasks"] == []
     finally:
         app.dependency_overrides.clear()
