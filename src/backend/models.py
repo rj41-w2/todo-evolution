@@ -38,8 +38,8 @@ class Task(Base):
     status = Column(SQLEnum(StatusEnum), default=StatusEnum.PENDING)
     priority = Column(SQLEnum(PriorityEnum), default=PriorityEnum.MEDIUM)
     tags = Column(JSON, default=[])
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    due_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    due_date = Column(DateTime(timezone=True), nullable=True)
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -48,8 +48,8 @@ class Conversation(Base):
     # FK to Better Auth `user.id` — see docs/external-seams.md for sync contract
     # Owner: Frontend (Better Auth). ON DELETE CASCADE: user deletion removes conversations.
     user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class Message(Base):
     __tablename__ = "messages"
@@ -62,7 +62,7 @@ class Message(Base):
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False) # "user" or "assistant"
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 # --- Pydantic Schemas ---
 

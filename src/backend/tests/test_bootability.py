@@ -10,7 +10,9 @@ These tests are hermetic by design — no database connection, no network, no
 credentials. They assert that the services *start*, not that they work.
 """
 
+import contextlib
 import importlib
+import io
 import os
 import subprocess
 import sys
@@ -86,6 +88,54 @@ def test_alembic_chain_generates_ddl_without_a_database():
 
     config = Config(str(BACKEND_DIR / "alembic.ini"))
     command.upgrade(config, "head", sql=True)
+
+
+def test_the_full_downgrade_path_renders():
+    """Every migration must be reversible, and reversibility must be checkable.
+
+    Only the upgrade direction was ever rendered offline. A downgrade that
+    raises, or emits DDL Postgres will not accept, is discovered by whoever
+    attempts a rollback in anger — the worst possible time to find out.
+
+    Renders `head:base` offline, so it needs no database and runs in the fast
+    CI job. It cannot prove a downgrade *works*; only applying it to a real
+    database can, and that was done by hand for issue #6. What it does prove
+    is that the path exists and generates statements at all.
+
+    The `AT TIME ZONE 'UTC'` clauses are asserted explicitly. Converting
+    between `timestamp` and `timestamptz` is interpreted by the *session*
+    timezone, so a downgrade that dropped the clause would shift every
+    timestamp by the server's offset — a quiet data change that no assertion
+    about the shape of the generated SQL would otherwise notice.
+    """
+    import io
+
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    # Offline mode prints the SQL and returns None. It writes to the process
+    # stdout rather than to `config.output_buffer` — setting that, or
+    # `config.stdout`, captures nothing.
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        command.downgrade(config, "head:base", sql=True)
+    sql = buffer.getvalue()
+
+    assert "DROP CONSTRAINT messages_conversation_fkey" in sql, (
+        "the ownership constraint added by 0003 is never dropped on downgrade"
+    )
+    assert "DROP CONSTRAINT messages_role_check" in sql, (
+        "the role check added by 0003 is never dropped on downgrade"
+    )
+    assert "ADD CONSTRAINT messages_conversation_id_fkey" in sql, (
+        "downgrade does not restore the single-column conversation foreign key"
+    )
+    assert sql.count("AT TIME ZONE 'UTC'") >= 5, (
+        "downgrade converts timezone-aware timestamps without pinning the "
+        "session timezone; Postgres would read them at the server's offset "
+        "and silently shift every timestamp"
+    )
 
 
 def test_alembic_chain_committed_here_is_sound():
