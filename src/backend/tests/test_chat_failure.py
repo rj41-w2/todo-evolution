@@ -21,6 +21,7 @@ check the status code as well as the rows.
 """
 
 import contextlib
+import json
 import uuid
 
 import pytest
@@ -29,7 +30,7 @@ from fastapi.testclient import TestClient
 
 from database import engine
 from main import app, get_current_user
-from models import ChatRequest
+from models import ChatRequest, ChatResponse
 
 pytestmark = pytest.mark.integration
 
@@ -117,6 +118,19 @@ def main_module():
     return main
 
 
+def _json(response):
+    """Normalise the three shapes a chat response arrives in.
+
+    `call_route` invokes the route function directly and gets a `ChatResponse`;
+    `TestClient` gives a `Response`. Tests should not care which.
+    """
+    if isinstance(response, ChatResponse):
+        return response.model_dump()
+    if hasattr(response, "json"):
+        return response.json()
+    return json.loads(response)
+
+
 def call_route(
     user_id: str,
     message: str,
@@ -165,12 +179,20 @@ def test_a_failed_llm_call_still_persists_the_user_message(alice, monkeypatch):
     _break_the_model(monkeypatch, RuntimeError("model unavailable"))
     message = f"a request that will never be answered {uuid.uuid4().hex[:8]}"
 
-    with pytest.raises(HTTPException) as excinfo:
-        call_route(ALICE, message)
+    response = call_route(ALICE, message)
 
-    assert excinfo.value.status_code == 500, (
-        "a failed model turn must surface as a 500; returning success with an "
-        "empty reply would make the outage invisible"
+    # Changed in issue #4. This used to assert a 500, and was right to: at the
+    # time a failure and a success were indistinguishable except by status
+    # code. The turn now reports `outcome`, so the status code no longer
+    # carries that meaning and a failed model call is a 200 saying so.
+    #
+    # What has not changed is the point of the test: the failure must stay
+    # visible. Asserting the status code alone would pass even if the response
+    # claimed everything had gone fine.
+    body = _json(response)
+    assert body["outcome"] == "failed", (
+        f"a failed model turn reported {body['outcome']!r}; an outage must not "
+        "look like a completed turn"
     )
 
     stored = _rows("messages", user_id=ALICE)
@@ -202,8 +224,10 @@ def test_a_failed_turn_leaves_the_conversation_reusable(alice, monkeypatch):
     first = f"first attempt {uuid.uuid4().hex[:8]}"
 
     _break_the_model(monkeypatch, RuntimeError("model unavailable"))
-    with pytest.raises(HTTPException):
-        call_route(ALICE, first)
+    first_turn = call_route(ALICE, first)
+    assert _json(first_turn)["outcome"] == "failed", (
+        "the first turn was expected to fail, and to say so"
+    )
 
     conversation_id = _rows("conversations", user_id=ALICE)[0].id
 

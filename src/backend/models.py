@@ -99,4 +99,16 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     conversation_id: uuid.UUID
     response: str
+    #: What actually happened to the user's data, which is not always what the
+    #: status code suggests. Issue #4: a chat turn used to answer 500 while a
+    #: tool it had already run had committed its work, so the user was told to
+    #: retry something that had succeeded.
+    #:
+    #:   completed — the model summarised the turn and every tool succeeded
+    #:   partial   — some of it happened, or the model could not summarise it
+    #:   failed    — nothing happened
+    #:
+    #: Additive, so existing clients keep working; they simply ignore it until
+    #: something renders it.
+    outcome: str = "completed"
     tool_calls: List[dict] = []

@@ -181,17 +181,18 @@ def test_chat_route_checks_out_nothing_during_the_llm_phase(
         elif name == "message_repo":
             extra[name] = SqlMessageRepository(shared)
 
-    with pytest.raises(HTTPException) as excinfo:
-        asyncio.run(
-            main.chat_with_agent(
-                user_id="user-a",
-                chat_req=ChatRequest(message="hello"),
-                authenticated_user_id="user-a",
-                **extra,
-            )
+    # The abort ends the turn. Since issue #4 a failed turn is a 200 reporting
+    # `outcome: failed` rather than a 500, so this no longer expects an
+    # exception — the connection measurement below is the whole point of the
+    # test, and it is unaffected by how the turn reports itself.
+    asyncio.run(
+        main.chat_with_agent(
+            user_id="user-a",
+            chat_req=ChatRequest(message="hello"),
+            authenticated_user_id="user-a",
+            **extra,
         )
-
-    assert excinfo.value.status_code == 500, "expected the abort to surface as a 500"
+    )
 
     # If the fake LLM client was never reached, the route failed earlier and
     # the count below would be vacuously zero. Say what actually went wrong

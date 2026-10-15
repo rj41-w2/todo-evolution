@@ -1,3 +1,4 @@
+import hashlib
 import os
 import sys
 import uuid
@@ -69,6 +70,39 @@ _openai_client = None
 # var means the next retirement or capacity spike is a config change rather than
 # a code change across two call sites.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+
+
+def conversation_lock_key(user_id: str) -> int:
+    """Advisory-lock key for this user's conversation coordination.
+
+    Must be a pure function of `user_id` across *processes*, not just across
+    calls. This used to be `abs(hash(user_id)) % (2**31)`, and Python
+    randomises string hashing per process unless `PYTHONHASHSEED` is pinned.
+    Five interpreters, same user id, five different keys:
+
+        823436976 / 1521828806 / 712369491 / 273740563 / 1575512665
+
+    With more than one worker, each takes a different lock, so the lock
+    serialises nothing and two concurrent requests can each create a
+    conversation. A single worker hides it completely, which is why it lived
+    as long as it did.
+
+    `hashlib` is stable across processes, machines and Postgres versions. Doing
+    it here rather than in SQL keeps the property testable without a database:
+    Postgres's own `hashtext()` would have worked too, but verifying it would
+    then require one.
+
+    The result is mapped into the signed 64-bit range. `int.from_bytes(...,
+    "big")` yields an *unsigned* 64-bit value, which exceeds
+    `bigint`'s maximum — `pg_advisory_xact_lock` then fails with
+    `function pg_advisory_xact_lock(numeric) does not exist`, because
+    psycopg2 sends the value as numeric rather than bigint. It also breaks
+    SQLite, which cannot store it at all. Subtracting 2**64 when the value is
+    too large gives a stable signed equivalent: the same user always maps to
+    the same key, which is the only property that matters here.
+    """
+    value = int.from_bytes(hashlib.sha256(user_id.encode()).digest()[:8], "big")
+    return value - 2**64 if value >= 2**63 else value
 
 
 def get_openai_client() -> openai.AsyncOpenAI:
@@ -315,7 +349,7 @@ async def chat_with_agent(
             # Prevent race condition: use PostgreSQL advisory lock on user_id hash
             # This serializes conversation creation per user. The lock is
             # transaction-scoped, so committing below also releases it promptly.
-            lock_key = abs(hash(user_id)) % (2**31)
+            lock_key = conversation_lock_key(user_id)
             session.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
 
             # Re-check inside lock: another request may have created a conversation
@@ -392,13 +426,28 @@ Guidelines:
         },
     )
 
+    # Failures inside this phase are recorded, not raised. Two separate
+    # guarantees depend on that:
+    #
+    #   * The MCP tools run in their own process and commit their own
+    #     transactions. There is nothing to roll back, so a 500 after a tool
+    #     succeeded cannot undo it — it can only lie about it. Lying is what
+    #     made "delete my task called grocery" answer *AI Chatbot service is
+    #     temporarily unavailable* when the real problem was a typo, and made a
+    #     created task vanish behind a failure the user was told to retry.
+    #   * A failing tool is a normal outcome, not an outage. `call_tool` returns
+    #     `isError=True` with a plain-English sentence rather than raising, so
+    #     feeding that text to `json.loads` is what used to turn every one of
+    #     them into a 500.
+    phase_failed: str | None = None
+
     try:
         async with stdio_client(mcp_server_params) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                
+
                 mcp_tools_res = await session.list_tools()
-                
+
                 openai_tools = []
                 for tool in mcp_tools_res.tools:
                     openai_tools.append({
@@ -416,32 +465,62 @@ Guidelines:
                     tools=openai_tools,
                     temperature=0.7
                 )
-                
+
                 response_message = response.choices[0].message
-                
+
                 if response_message.tool_calls:
                     openai_history.append(response_message)
-                    
+
                     for tool_call in response_message.tool_calls:
                         tool_name = tool_call.function.name
-                        tool_args = json.loads(tool_call.function.arguments)
-                        
-                        result = await session.call_tool(tool_name, arguments=tool_args)
-                        tool_result_str = result.content[0].text if result.content else "{}"
-                        
-                        executed_tools.append({
-                            "tool": tool_name,
-                            "parameters": tool_args,
-                            "result": json.loads(tool_result_str)
-                        })
-                        
+                        try:
+                            tool_args = json.loads(tool_call.function.arguments)
+                        except (TypeError, ValueError):
+                            tool_args = {}
+
+                        # Each tool is its own intent. One failing must not
+                        # abandon the rest — a user asking to delete one task
+                        # and create another still wants the task created.
+                        entry = {"tool": tool_name, "parameters": tool_args}
+                        try:
+                            result = await session.call_tool(tool_name, arguments=tool_args)
+                            tool_result_str = result.content[0].text if result.content else "{}"
+
+                            if getattr(result, "isError", False):
+                                # `text` here is `Error executing tool <name>: <reason>`.
+                                # The reason can be a friendly message or a driver
+                                # traceback, so it is logged in full and never
+                                # surfaced. Leaking it is #3's acceptance
+                                # criterion, not this one's.
+                                entry.update(ok=False, result=None)
+                                logger.info(
+                                    "Tool %s failed for user %s: %s",
+                                    tool_name, user_id, tool_result_str,
+                                )
+                            else:
+                                try:
+                                    parsed = json.loads(tool_result_str)
+                                except (TypeError, ValueError):
+                                    parsed = None
+                                entry.update(ok=True, result=parsed)
+                        except Exception as tool_exc:  # noqa: BLE001 - one tool, one verdict
+                            logger.warning(
+                                "Tool %s raised for user %s: %s",
+                                tool_name, user_id, tool_exc, exc_info=True,
+                            )
+                            entry.update(ok=False, result=None)
+
+                        executed_tools.append(entry)
                         openai_history.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
                             "name": tool_name,
-                            "content": tool_result_str
+                            "content": json.dumps(entry.get("result") or {"ok": entry.get("ok")})
                         })
-                        
+
+                    # The model may not come back even though the tools did. That
+                    # is a partial turn, and it is exactly when the user most
+                    # needs to be told what happened to their data.
                     second_response = await client.chat.completions.create(
                         model=GEMINI_MODEL,
                         messages=openai_history,
@@ -452,25 +531,62 @@ Guidelines:
                 else:
                     response_text = response_message.content
 
-    except Exception as exc:
-        logger.error("Chat failed for user %s: %s", user_id, exc, exc_info=True)
-        # Session auto-rolls back on exception; no manual cleanup needed
-        raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")
+    except Exception as exc:  # noqa: BLE001 - the turn failed; the record must not
+        phase_failed = str(exc)
+        logger.error("Chat turn failed for user %s: %s", user_id, exc, exc_info=True)
+
+    # --- The turn's verdict ----------------------------------------------------
+    #
+    # Derived from what actually happened, not from whether an exception was
+    # raised. The distinction matters: a turn that failed loudly is worse than
+    # one that failed honestly, because the natural response to "it failed" is
+    # to ask again.
+    succeeded = [t for t in executed_tools if t.get("ok")]
+    failed = [t for t in executed_tools if not t.get("ok")]
+
+    if succeeded and not failed and not phase_failed:
+        outcome = "completed"
+    elif succeeded:
+        outcome = "partial"
+    elif failed or phase_failed:
+        outcome = "partial" if response_text else "failed"
+    else:
+        outcome = "failed" if phase_failed else "completed"
+
+    # When the model produced nothing, the conversation still has to say what
+    # happened. Built from the tool results rather than from the model, because
+    # the model is the thing that is missing.
+    if not response_text and (succeeded or failed):
+        parts = [f"Completed {len(succeeded)} action(s)."] if succeeded else []
+        if failed:
+            parts.append(f"{len(failed)} action(s) could not be completed.")
+        if phase_failed:
+            parts.append("The assistant could not summarise the result.")
+        response_text = " ".join(parts)
 
     # --- Phase 3: a second short-lived session ---------------------------------
     # Opened only now, after the LLM phase has finished, so it is never idle
-    # long enough for the pooler to reclaim it.
-    with SessionLocal() as session:
-        SqlMessageRepository(session).add_message(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            role="assistant",
-            content=response_text or "",
-        )
-        session.commit()
+    # long enough for the pooler to reclaim it. It runs even when the turn
+    # failed, because a tool that already committed its work has to be
+    # recorded — otherwise the user's next turn has no idea it happened.
+    #
+    # But only when there is something to say. A turn where the model died
+    # before speaking and no tool ran would otherwise append an empty assistant
+    # message: noise in the history the model is later replayed, and a message
+    # row that claims something happened when nothing did.
+    if response_text:
+        with SessionLocal() as session:
+            SqlMessageRepository(session).add_message(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                role="assistant",
+                content=response_text,
+            )
+            session.commit()
 
     return ChatResponse(
         conversation_id=conversation_id,
         response=response_text or "",
+        outcome=outcome,
         tool_calls=executed_tools
     )
