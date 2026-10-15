@@ -28,6 +28,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash}
       - JWKS_URL=${JWKS_URL:-http://frontend:3000/api/auth/jwks}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     depends_on:

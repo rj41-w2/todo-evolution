@@ -20,15 +20,15 @@ import openai
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from database import get_db
+from database import get_db, SessionLocal
 from models import (
     Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
     Conversation, Message, ChatRequest, ChatResponse
 )
 from repositories import (
     SqlTaskRepository, TaskRepository,
-    SqlConversationRepository, ConversationRepository,
-    SqlMessageRepository, MessageRepository,
+    SqlConversationRepository,
+    SqlMessageRepository,
 )
 
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
@@ -46,6 +46,29 @@ MCP_SERVER_SCRIPT = Path(__file__).resolve().parent / "mcp_server.py"
 # CRUD, which needs no key at all. The OpenAI SDK also raises when api_key is
 # None, so the failure surfaced as a misleading "set OPENAI_API_KEY" error.
 _openai_client = None
+
+# The Gemini model id, overridable with GEMINI_MODEL.
+#
+# This was hardcoded to `gemini-1.5-flash-latest`, which Google has since
+# retired — every chat request 500'd with a 404 naming a model that no longer
+# exists. Nothing in CI caught it: the chat route needs a live key and a real
+# model to fail at all.
+#
+# Picking the default is less obvious than it looks. Two traps, both hit while
+# verifying on a live stack:
+#
+#   * `gemini-flash-latest` is the floating alias, and it was returning 503
+#     "high demand" continuously. A floating alias points at whatever is newest,
+#     which is also the most contended.
+#   * `gemini-2.5-flash` and `gemini-2.5-flash-lite` are listed by the v1beta
+#     `models` endpoint as supporting generateContent, but 404 through the
+#     OpenAI-compatibility endpoint this client uses. Being listed is not the
+#     same as being reachable here.
+#
+# `gemini-3.5-flash` answered a tool-calling request on every attempt. The env
+# var means the next retirement or capacity spike is a config change rather than
+# a code change across two call sites.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 
 def get_openai_client() -> openai.AsyncOpenAI:
@@ -128,12 +151,10 @@ def get_task_repo(db: Session = Depends(get_db)) -> TaskRepository:
     return SqlTaskRepository(db)
 
 
-def get_conversation_repo(db: Session = Depends(get_db)) -> ConversationRepository:
-    return SqlConversationRepository(db)
-
-
-def get_message_repo(db: Session = Depends(get_db)) -> MessageRepository:
-    return SqlMessageRepository(db)
+# `get_conversation_repo` and `get_message_repo` used to live here. The chat
+# route no longer takes them: it opens its own short-lived sessions so that no
+# connection is held across an LLM call. The only remaining route dependency is
+# the task repository.
 
 
 @app.get("/")
@@ -249,8 +270,6 @@ async def chat_with_agent(
     user_id: str,
     chat_req: ChatRequest,
     authenticated_user_id: str = Depends(get_current_user),
-    conversation_repo: ConversationRepository = Depends(get_conversation_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -265,35 +284,65 @@ async def chat_with_agent(
             detail="GEMINI_API_KEY is not configured on the backend server."
         )
 
-    if chat_req.conversation_id:
-        conversation = conversation_repo.get_by_id_and_user(chat_req.conversation_id, user_id)
-        if not conversation:
-            raise HTTPException(status_code=404, detail="Conversation session not found")
-    else:
-        # Prevent race condition: use PostgreSQL advisory lock on user_id hash
-        # This serializes conversation creation per user
-        lock_key = abs(hash(user_id)) % (2**31)
-        # Need raw session for advisory lock - get it from repository
-        session = conversation_repo.session
-        session.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
-        
-        # Re-check inside lock: another request may have created a conversation
-        conversation = conversation_repo.get_latest_by_user(user_id)
-        
-        if not conversation:
-            conversation = conversation_repo.create_for_user(user_id)
+    # --- Phase 1: a short-lived database session ------------------------------
+    #
+    # This route used to take one dependency-injected session and hold it for the
+    # whole request — across two Gemini calls, tens of seconds of network
+    # round-trips during which it sat idle inside an open transaction. Neon is
+    # reached through the *pooler*, which reclaims exactly that kind of
+    # connection. The symptom was nasty and silent: the tool had already created
+    # the task, Gemini had already written its reply, and then the final
+    # `INSERT INTO messages` failed with "SSL connection has been closed
+    # unexpectedly", so the user got a 500 and lost the whole conversation.
+    #
+    # Everything in this phase is fast and transactional, so it commits and
+    # closes before any LLM call is made. The user's message is committed here
+    # rather than at the end, so it survives an LLM failure instead of vanishing
+    # with the rolled-back transaction.
+    with SessionLocal() as session:
+        conversation_repo = SqlConversationRepository(session)
+        message_repo = SqlMessageRepository(session)
 
-    # Get recent history using repository (uses composite index)
-    messages = message_repo.history(conversation.id, user_id, limit=10)
-    messages.reverse()
+        if chat_req.conversation_id:
+            conversation = conversation_repo.get_by_id_and_user(chat_req.conversation_id, user_id)
+            if not conversation:
+                raise HTTPException(status_code=404, detail="Conversation session not found")
+        else:
+            # Prevent race condition: use PostgreSQL advisory lock on user_id hash
+            # This serializes conversation creation per user. The lock is
+            # transaction-scoped, so committing below also releases it promptly.
+            lock_key = abs(hash(user_id)) % (2**31)
+            session.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
 
-    # Add user message via repository
-    user_msg_record = message_repo.add_message(
-        conversation_id=conversation.id,
-        user_id=user_id,
-        role="user",
-        content=chat_req.message
-    )
+            # Re-check inside lock: another request may have created a conversation
+            conversation = conversation_repo.get_latest_by_user(user_id)
+
+            if not conversation:
+                conversation = conversation_repo.create_for_user(user_id)
+
+        conversation_id = conversation.id
+
+        # Read history as plain tuples, not ORM instances. Phase 1 closes this
+        # session before the LLM runs, and touching `msg.content` afterwards
+        # raises DetachedInstanceError. Extract what is needed while the
+        # session is still open. Also maps 'model' to 'assistant', which the
+        # OpenAI-shaped SDK expects.
+        history = [
+            ("assistant" if m.role in ("model", "assistant") else "user", m.content)
+            for m in reversed(message_repo.history(conversation_id, user_id, limit=10))
+        ]
+
+        message_repo.add_message(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            role="user",
+            content=chat_req.message,
+        )
+        session.commit()
+
+    # --- Phase 2: no database connection held ---------------------------------
+    # Gemini and the MCP subprocess both run here, and neither touches the
+    # database connection pool.
 
     system_instruction = f"""You are a premium, highly intelligent, and friendly AI Todo Assistant for the EVO-TODO app.
 Your job is to help the user manage their tasks (add, update, delete, complete, and list tasks) using your available tools.
@@ -310,10 +359,8 @@ Guidelines:
 """
     
     openai_history = [{"role": "system", "content": system_instruction}]
-    for msg in messages:
-        # map 'model' role to 'assistant' for openai SDK
-        role = "assistant" if msg.role == "model" or msg.role == "assistant" else "user"
-        openai_history.append({"role": role, "content": msg.content})
+    for role, content in history:
+        openai_history.append({"role": role, "content": content})
     openai_history.append({"role": "user", "content": chat_req.message})
 
     # Use the shared singleton client (Issue 7), built on first use
@@ -360,7 +407,7 @@ Guidelines:
                     })
 
                 response = await client.chat.completions.create(
-                    model="gemini-1.5-flash-latest",
+                    model=GEMINI_MODEL,
                     messages=openai_history,
                     tools=openai_tools,
                     temperature=0.7
@@ -392,7 +439,7 @@ Guidelines:
                         })
                         
                     second_response = await client.chat.completions.create(
-                        model="gemini-1.5-flash-latest",
+                        model=GEMINI_MODEL,
                         messages=openai_history,
                         tools=openai_tools,
                         temperature=0.7
@@ -406,17 +453,20 @@ Guidelines:
         # Session auto-rolls back on exception; no manual cleanup needed
         raise HTTPException(status_code=500, detail="AI Chatbot service is temporarily unavailable")
 
-    # Add assistant message via repository
-    message_repo.add_message(
-        conversation_id=conversation.id,
-        user_id=user_id,
-        role="assistant",
-        content=response_text or ""
-    )
-    message_repo.session.commit()
+    # --- Phase 3: a second short-lived session ---------------------------------
+    # Opened only now, after the LLM phase has finished, so it is never idle
+    # long enough for the pooler to reclaim it.
+    with SessionLocal() as session:
+        SqlMessageRepository(session).add_message(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            role="assistant",
+            content=response_text or "",
+        )
+        session.commit()
 
     return ChatResponse(
-        conversation_id=conversation.id,
+        conversation_id=conversation_id,
         response=response_text or "",
         tool_calls=executed_tools
     )
