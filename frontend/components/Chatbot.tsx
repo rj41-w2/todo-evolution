@@ -143,15 +143,36 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
         publishAgentActivity(deriveLatestAgentAction(finalMessages, newToolLogs));
 
       } else {
-        throw new Error('Failed to get response from assistant');
+        // Carry the status so the catch can tell *why* it failed.
+        // `secureFetch` returns the Response rather than throwing, so this is
+        // the only place the status is in scope.
+        const failure = new Error(`Chat request failed with ${res.status}`) as Error & { status?: number };
+        failure.status = res.status;
+        throw failure;
       }
     } catch (err: unknown) {
       console.error('Chat error:', err);
+
+      // A 404 means our stored conversation id no longer exists. Since #5 a
+      // request with no id starts a *new* conversation rather than silently
+      // resuming the latest one, so the server no longer heals a stale id on
+      // our behalf — and reporting it as a network or API-key problem, which
+      // is what the generic message below does, would send the user chasing
+      // the wrong thing.
+      const status = (err as { status?: number } | null)?.status;
+      const isStaleConversation = status === 404;
+      if (isStaleConversation) {
+        setConversationId(null);
+        localStorage.removeItem(`evo_conv_id_${user.id}`);
+      }
+
       // Append a local error message
       const errorMsg: ChatMessage = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "Sorry, I ran into an issue connecting to the AI brain. Please check your network and Gemini API key config.",
+        content: isStaleConversation
+          ? "That conversation is no longer available, so I started fresh. Ask me again and we'll carry on from here."
+          : "Sorry, I ran into an issue connecting to the AI brain. Please check your network and Gemini API key config.",
         created_at: new Date().toISOString()
       };
       const finalMessages = [...updatedMessages, errorMsg];

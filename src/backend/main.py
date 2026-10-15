@@ -1,4 +1,3 @@
-import hashlib
 import os
 import sys
 import uuid
@@ -70,39 +69,6 @@ _openai_client = None
 # var means the next retirement or capacity spike is a config change rather than
 # a code change across two call sites.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-
-
-def conversation_lock_key(user_id: str) -> int:
-    """Advisory-lock key for this user's conversation coordination.
-
-    Must be a pure function of `user_id` across *processes*, not just across
-    calls. This used to be `abs(hash(user_id)) % (2**31)`, and Python
-    randomises string hashing per process unless `PYTHONHASHSEED` is pinned.
-    Five interpreters, same user id, five different keys:
-
-        823436976 / 1521828806 / 712369491 / 273740563 / 1575512665
-
-    With more than one worker, each takes a different lock, so the lock
-    serialises nothing and two concurrent requests can each create a
-    conversation. A single worker hides it completely, which is why it lived
-    as long as it did.
-
-    `hashlib` is stable across processes, machines and Postgres versions. Doing
-    it here rather than in SQL keeps the property testable without a database:
-    Postgres's own `hashtext()` would have worked too, but verifying it would
-    then require one.
-
-    The result is mapped into the signed 64-bit range. `int.from_bytes(...,
-    "big")` yields an *unsigned* 64-bit value, which exceeds
-    `bigint`'s maximum — `pg_advisory_xact_lock` then fails with
-    `function pg_advisory_xact_lock(numeric) does not exist`, because
-    psycopg2 sends the value as numeric rather than bigint. It also breaks
-    SQLite, which cannot store it at all. Subtracting 2**64 when the value is
-    too large gives a stable signed equivalent: the same user always maps to
-    the same key, which is the only property that matters here.
-    """
-    value = int.from_bytes(hashlib.sha256(user_id.encode()).digest()[:8], "big")
-    return value - 2**64 if value >= 2**63 else value
 
 
 def get_openai_client() -> openai.AsyncOpenAI:
@@ -346,17 +312,23 @@ async def chat_with_agent(
             if not conversation:
                 raise HTTPException(status_code=404, detail="Conversation session not found")
         else:
-            # Prevent race condition: use PostgreSQL advisory lock on user_id hash
-            # This serializes conversation creation per user. The lock is
-            # transaction-scoped, so committing below also releases it promptly.
-            lock_key = conversation_lock_key(user_id)
-            session.execute(sa.text("SELECT pg_advisory_xact_lock(:lock_key)"), {"lock_key": lock_key})
-
-            # Re-check inside lock: another request may have created a conversation
-            conversation = conversation_repo.get_latest_by_user(user_id)
-
-            if not conversation:
-                conversation = conversation_repo.create_for_user(user_id)
+            # No conversation_id always means a new conversation. Issue #5.
+            #
+            # This used to resume the most recent conversation instead, which
+            # made the client's "New chat" button impossible: `clearChat` sets
+            # the id to null, so the very next message carried no id and the
+            # backend put it back in the thread the user had just abandoned.
+            #
+            # The server cannot distinguish "this is a new chat" from "the
+            # client forgot the id", so guessing is the wrong move — and it
+            # guessed the one answer that made the feature unusable. Resuming
+            # is now something the client asks for, by sending an id.
+            #
+            # This also removes the need for the advisory lock that stood
+            # here: it only existed to stop two requests racing to create
+            # *the* conversation for a user. Every unadorned request creates
+            # its own, so there is nothing left to serialise.
+            conversation = conversation_repo.create_for_user(user_id)
 
         conversation_id = conversation.id
 

@@ -14,8 +14,6 @@ class ConversationRepository(Repository[Conversation], Protocol):
 
     def get_by_id_and_user(self, conversation_id: UUID, user_id: str) -> Conversation | None: ...
 
-    def get_latest_by_user(self, user_id: str) -> Conversation | None: ...
-
     def create_for_user(self, user_id: str) -> Conversation: ...
 
     # Base CRUD inherited: create, update, delete, get, list, exists
@@ -40,13 +38,6 @@ class SqlConversationRepository(SqlRepository[Conversation]):
             .first()
         )
 
-    def get_latest_by_user(self, user_id: str) -> Conversation | None:
-        return (
-            self._session.query(Conversation)
-            .filter(Conversation.user_id == user_id)
-            .order_by(Conversation.created_at.desc())
-            .first()
-        )
 
     def create_for_user(self, user_id: str) -> Conversation:
         conversation = Conversation(user_id=user_id)
