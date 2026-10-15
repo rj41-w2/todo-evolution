@@ -14,7 +14,7 @@ from repositories.task_repository import TaskRepository
 client = TestClient(app)
 
 
-def test_get_tasks_uses_repository_not_session():
+def test_get_tasks_uses_repository_not_session(auth_as_tenant):
     """Proof-of-concept: endpoint calls TaskRepository.list_by_user, not db.query()."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_task = Task(
@@ -50,7 +50,7 @@ def test_get_tasks_uses_repository_not_session():
         app.dependency_overrides.clear()
 
 
-def test_get_tasks_filters_by_status_and_priority():
+def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
     """Repository receives filter params correctly."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_repo.list_by_user.return_value = []
@@ -60,7 +60,7 @@ def test_get_tasks_filters_by_status_and_priority():
 
     try:
         response = client.get(
-            "/api/test-user/tasks?status=completed&priority=high",
+            "/api/test-user/tasks?status=Completed&priority=High",
             headers={"Authorization": "Bearer fake-token"},
         )
         assert response.status_code == 200
@@ -71,7 +71,7 @@ def test_get_tasks_filters_by_status_and_priority():
         app.dependency_overrides.clear()
 
 
-def test_get_tasks_returns_empty_list_when_no_tasks():
+def test_get_tasks_returns_empty_list_when_no_tasks(auth_as_tenant):
     """Empty result from repository returns empty list."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_repo.list_by_user.return_value = []

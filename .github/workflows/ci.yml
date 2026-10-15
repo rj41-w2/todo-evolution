@@ -35,14 +35,95 @@ jobs:
       # read/write, and a non-blocking step would have hidden exactly that: the
       # tests were never written, so nothing was ever red to notice.
       - run: python -m pytest tests/test_mcp_authz.py -v
-      # Non-blocking: the rest of the backend suite. 10 pre-existing failures
-      # date from when auth was added to the endpoints — these tests override
-      # get_task_repo but not get_current_user, so a real JWKS lookup rejects
-      # their fake token with 401. Tracked separately; `continue-on-error`
-      # keeps them reported without letting a known-failing baseline mask a
-      # new regression. Remove this step once that baseline is green.
+      # The rest of the hermetic suite. These were previously allowed to fail
+      # behind `continue-on-error` while ten tests sat broken and unreported
+      # (issue #9). They are green now, so the flag is gone: a step that can
+      # only ever turn green is not a check.
       - run: python -m pytest -v
-        continue-on-error: true
+
+  # Database-backed checks, split out so the fast gates above stay fast.
+  #
+  # These cannot live in the `backend` job. Every test there is hermetic —
+  # `create_engine` is lazy and the URL is never dialled — because CI has no
+  # PostgreSQL and standing one up for every run would tax the fast path for
+  # tests that mostly assert wiring. Issue #8 asked for exactly this split.
+  #
+  # What this job buys is the class of bug nothing else can see. `POST /tasks`
+  # answered 201 Created and wrote nothing, for as long as the only endpoint
+  # tests were mocks: a mock confirms a repository was *called* just as happily
+  # about a write that was rolled back a millisecond later.
+  backend-integration:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: todorev
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/todorev
+      CORS_ORIGINS: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-only-secret-not-a-real-credential
+      BETTER_AUTH_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: pip install --default-timeout=100 --retries 5 -r requirements.txt -r requirements-dev.txt
+      # Better Auth owns `user`, `session`, `account`, `verification` and
+      # `jwks`. The application tables have foreign keys into `user`, so this
+      # must run first. It runs from the frontend because that is where `auth`
+      # and its config live; a hand-written SQL stand-in would drift from the
+      # real schema, and the point of these tests is to verify the real
+      # contract.
+      - name: Better Auth schema
+        working-directory: frontend
+        run: |
+          npm ci
+          npx auth migrate --yes
+      - name: Application schema
+        run: alembic upgrade head
+      - name: Database-backed checks
+        run: python -m pytest -m integration -v
+      # The image the backend actually ships. Its CMD runs `alembic upgrade head`
+      # before uvicorn, so this covers startup order and packaging together —
+      # the two things a test against the source tree cannot check.
+      - name: Production container starts and serves
+        run: |
+          docker build -t todo-backend .
+          docker run -d --name todo-backend -p 8000:8000 \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e CORS_ORIGINS="$CORS_ORIGINS" \
+            -e GEMINI_API_KEY="" \
+            todo-backend
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "container healthy after ${i} polls"
+              curl -sf http://localhost:8000/health
+              docker rm -f todo-backend
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "container never became healthy; logs:"
+          docker logs todo-backend
+          docker rm -f todo-backend
+          exit 1
 
   frontend:
     runs-on: ubuntu-latest

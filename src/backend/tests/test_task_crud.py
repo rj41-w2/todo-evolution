@@ -22,7 +22,7 @@ def _clear_overrides():
     app.dependency_overrides.clear()
 
 
-def test_create_task_uses_repository():
+def test_create_task_uses_repository(auth_as_tenant):
     """POST /tasks calls task_repo.create()"""
     mock_repo = MagicMock(spec=TaskRepository)
     task_id = uuid4()
@@ -60,7 +60,7 @@ def test_create_task_uses_repository():
         _clear_overrides()
 
 
-def test_get_task_uses_repository():
+def test_get_task_uses_repository(auth_as_tenant):
     """GET /tasks/{id} calls task_repo.get_by_id_and_user()"""
     mock_repo = MagicMock(spec=TaskRepository)
     task_id = uuid4()
@@ -92,7 +92,7 @@ def test_get_task_uses_repository():
         _clear_overrides()
 
 
-def test_get_task_returns_404_when_not_found():
+def test_get_task_returns_404_when_not_found(auth_as_tenant):
     """GET /tasks/{id} returns 404 when repository returns None"""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_repo.get_by_id_and_user.return_value = None
@@ -108,7 +108,7 @@ def test_get_task_returns_404_when_not_found():
         _clear_overrides()
 
 
-def test_update_task_uses_repository():
+def test_update_task_uses_repository(auth_as_tenant):
     """PUT /tasks/{id} calls task_repo.get_by_id_and_user() then task_repo.update()"""
     mock_repo = MagicMock(spec=TaskRepository)
     task_id = uuid4()
@@ -155,7 +155,7 @@ def test_update_task_uses_repository():
         _clear_overrides()
 
 
-def test_delete_task_uses_repository():
+def test_delete_task_uses_repository(auth_as_tenant):
     """DELETE /tasks/{id} calls task_repo.get_by_id_and_user() then task_repo.delete()"""
     mock_repo = MagicMock(spec=TaskRepository)
     task_id = uuid4()
@@ -182,6 +182,14 @@ def test_delete_task_uses_repository():
 
         mock_repo.get_by_id_and_user.assert_called_once_with(task_id, "test-user")
         mock_repo.delete.assert_called_once_with(existing_task)
-        mock_repo.session.commit.assert_called_once()
+        # This route used to end with `task_repo.session.commit()`, and this
+        # test used to assert it. That was the tell: DELETE was the only route
+        # reaching past the repository into the session, which is why it
+        # persisted while POST and PUT answered 201/200 and wrote nothing.
+        # `get_db` now owns the transaction for every route, so the commit
+        # belongs there and not here.
+        # Asserting on real persistence lives in tests/test_task_persistence.py,
+        # which needs a database — a mock cannot tell you a write was rolled
+        # back a millisecond later.
     finally:
         _clear_overrides()

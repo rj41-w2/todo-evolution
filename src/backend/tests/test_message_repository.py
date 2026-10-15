@@ -23,7 +23,7 @@ def test_message_repository_history_uses_correct_query():
 
     result = mock_repo.history(conv_id, user_id, limit=10)
 
-    mock_repo.history.assert_called_once_with(conv_id, user_id, 10)
+    mock_repo.history.assert_called_once_with(conv_id, user_id, limit=10)
     assert len(result) == 2
     assert result[0].role == "user"
     assert result[1].role == "assistant"
@@ -72,4 +72,6 @@ def test_message_repository_history_respects_limit():
 
     mock_repo.history(uuid4(), "test-user", limit=5)
 
-    mock_repo.history.assert_called_once_with(mock_repo.history.call_args[0][0], "test-user", 5)
+    mock_repo.history.assert_called_once_with(
+        mock_repo.history.call_args[0][0], "test-user", limit=5
+    )
