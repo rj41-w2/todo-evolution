@@ -49,10 +49,29 @@ export interface ToolCall {
   tool: string;
   parameters: Record<string, unknown>;
   result: Record<string, unknown>;
+  /** Present since issue #4. Optional so older responses still type-check. */
+  ok?: boolean;
+}
+
+/** One row in the conversation switcher (issue #13). */
+export interface ConversationSummary {
+  id: string;
+  /** The thread's last message — what a user recognises a chat by. */
+  preview: string | null;
+  message_count: number;
+  created_at: string;
+  last_activity_at: string | null;
 }
 
 export interface ChatResponse {
   conversation_id: string;
   response: string;
   tool_calls: ToolCall[];
+  /** What actually happened to the user's data. See docs/chat-failure-modes.md. */
+  outcome?: 'completed' | 'partial' | 'failed';
+}
+
+export interface ConversationMessagesResponse {
+  conversation_id: string;
+  messages: ChatMessage[];
 }

@@ -23,12 +23,14 @@ from mcp.client.stdio import stdio_client
 from database import get_db, SessionLocal
 from models import (
     Task, TaskCreate, TaskUpdate, TaskResponse, StatusEnum, PriorityEnum,
-    Conversation, Message, ChatRequest, ChatResponse
+    Conversation, Message, ChatRequest, ChatResponse,
+    ConversationSummary, ConversationListResponse, MessageOut,
+    ConversationMessagesResponse,
 )
 from repositories import (
     SqlTaskRepository, TaskRepository,
-    SqlConversationRepository,
-    SqlMessageRepository,
+    SqlConversationRepository, ConversationRepository,
+    SqlMessageRepository, MessageRepository,
 )
 
 # Tables are managed by Alembic (`alembic upgrade head`), which must run before
@@ -151,10 +153,18 @@ def get_task_repo(db: Session = Depends(get_db)) -> TaskRepository:
     return SqlTaskRepository(db)
 
 
-# `get_conversation_repo` and `get_message_repo` used to live here. The chat
-# route no longer takes them: it opens its own short-lived sessions so that no
-# connection is held across an LLM call. The only remaining route dependency is
-# the task repository.
+def get_conversation_repo(db: Session = Depends(get_db)) -> ConversationRepository:
+    return SqlConversationRepository(db)
+
+
+def get_message_repo(db: Session = Depends(get_db)) -> MessageRepository:
+    return SqlMessageRepository(db)
+
+
+# Note the asymmetry. The chat *write* route does not use these: it opens its
+# own short-lived sessions so that no connection is held across an LLM call.
+# The conversation *read* routes do use them, because they do no waiting at all
+# and nothing is gained by hand-rolling sessions for a single query.
 
 
 @app.get("/")
@@ -164,6 +174,80 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/api/{user_id}/conversations", response_model=ConversationListResponse)
+def list_conversations(
+    user_id: str,
+    authenticated_user_id: str = Depends(get_current_user),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repo),
+):
+    """The user's conversations, most recently active first.
+
+    Issue #13. Until this existed a conversation could be *addressed* by id
+    but never *found*, so a saved thread was unreachable on any browser that
+    had not started it.
+
+    Ordering comes from the last message, not from `conversations.updated_at`
+    — nothing updates that column, so it still equals `created_at` and would
+    order threads by when they were started rather than when they were used.
+    """
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    rows = conversation_repo.list_by_user(user_id)
+    return ConversationListResponse(
+        conversations=[
+            ConversationSummary(
+                id=r["id"],
+                preview=r["preview"],
+                message_count=r["message_count"],
+                created_at=r["created_at"],
+                last_activity_at=r["last_activity_at"],
+            )
+            for r in rows
+        ]
+    )
+
+
+@app.get(
+    "/api/{user_id}/conversations/{conversation_id}/messages",
+    response_model=ConversationMessagesResponse,
+)
+def read_conversation_messages(
+    user_id: str,
+    conversation_id: uuid.UUID,
+    authenticated_user_id: str = Depends(get_current_user),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repo),
+    message_repo: MessageRepository = Depends(get_message_repo),
+):
+    """A thread's messages, oldest first.
+
+    Scoped by owner, not merely by id: a conversation id is a UUID, so the
+    threat is not guessing one but *using* a known one, and a caller who
+    belongs to a different user must get 404 rather than another tenant's
+    content.
+    """
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    conversation = conversation_repo.get_by_id_and_user(conversation_id, user_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return ConversationMessagesResponse(
+        conversation_id=conversation_id,
+        messages=[
+            MessageOut(id=m.id, role=m.role, content=m.content, created_at=m.created_at)
+            for m in message_repo.list_for_conversation(conversation_id, user_id)
+        ],
+    )
+
 
 # --- CRUD Endpoints ---
 

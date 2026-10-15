@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
-import { AuthUser, ChatMessage, ToolCall, ChatResponse } from '../types';
+import { AuthUser, ChatMessage, ToolCall, ChatResponse, ConversationSummary } from '../types';
 import { deriveLatestAgentAction, describeToolCall, publishAgentActivity } from '../lib/agent-activity';
 
 interface ChatbotProps {
@@ -25,6 +25,12 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [toolLogs, setToolLogs] = useState<Record<string, ToolCall[]>>({});
+  // Issue #13: a saved conversation was reachable only from this browser's
+  // localStorage. These conversations are fetched from the server, so a thread
+  // started on another device is equally visible here.
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [showConversations, setShowConversations] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -60,12 +66,69 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // 3a. Conversation switcher (issue #13)
+  const loadConversations = async () => {
+    if (!user) return;
+    setLoadingConversations(true);
+    try {
+      const res = await secureFetch(`/api/${user.id}/conversations`);
+      if (res.ok) {
+        const data: { conversations: ConversationSummary[] } = await res.json();
+        setConversations(data.conversations);
+      }
+    } catch (err) {
+      console.error('Could not load conversations:', err);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  const toggleConversations = () => {
+    const next = !showConversations;
+    setShowConversations(next);
+    // Fetch on open rather than on every render. The list changes when a turn
+    // happens, so refreshing it each time the panel appears is enough.
+    if (next) void loadConversations();
+  };
+
+  // Open a saved conversation: load its history from the server rather than
+  // assuming localStorage holds it. Without this, switching to a thread
+  // started elsewhere would show an empty panel that silently appends to the
+  // wrong conversation's id.
+  const openConversation = async (id: string) => {
+    if (!user) return;
+    setShowConversations(false);
+    try {
+      const res = await secureFetch(`/api/${user.id}/conversations/${id}/messages`);
+      if (!res.ok) {
+        // Gone on the server — our id is stale. Drop it so the next message
+        // starts clean rather than repeating a 404.
+        setConversationId(null);
+        setMessages([]);
+        setToolLogs({});
+        localStorage.removeItem(`evo_conv_id_${user.id}`);
+        return;
+      }
+      const data: { conversation_id: string; messages: ChatMessage[] } = await res.json();
+      setConversationId(data.conversation_id);
+      setMessages(data.messages);
+      setToolLogs({});
+      localStorage.setItem(`evo_conv_id_${user.id}`, data.conversation_id);
+      localStorage.setItem(`evo_chat_history_${user.id}`, JSON.stringify(data.messages));
+      localStorage.removeItem(`evo_tool_logs_${user.id}`);
+      publishAgentActivity(deriveLatestAgentAction(data.messages, {}));
+    } catch (err) {
+      console.error('Could not open conversation:', err);
+    }
+  };
+
   // 3. Clear Chat Session
   const clearChat = () => {
     if (!user) return;
     setMessages([]);
     setConversationId(null);
     setToolLogs({});
+    setShowConversations(false);
     localStorage.removeItem(`evo_conv_id_${user.id}`);
     localStorage.removeItem(`evo_chat_history_${user.id}`);
     localStorage.removeItem(`evo_tool_logs_${user.id}`);
@@ -236,6 +299,14 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
               </div>
 
               <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleConversations}
+                  aria-expanded={showConversations}
+                  aria-label="Show saved conversations"
+                  className="icon-btn"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </button>
                 {messages.length > 0 && (
                   <button
                     onClick={clearChat}
@@ -254,8 +325,61 @@ export default function Chatbot({ onTaskMutation, open, onOpenChange }: ChatbotP
               </div>
             </div>
 
+            {/* Saved conversations (issue #13). Replaces the message area
+                while open — the drawer is only 400px wide, and a side panel
+                would squeeze the transcript it shares space with. */}
+            {showConversations && (
+              <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                <div className="flex items-center justify-between px-1 pb-1">
+                  <p className="text-[11px] font-medium text-muted">
+                    Saved conversations
+                  </p>
+                  <button
+                    onClick={clearChat}
+                    className="h-7 px-2 rounded-[var(--radius-input)] text-[11px] font-medium text-muted hover:bg-paper-2 transition-colors cursor-pointer"
+                  >
+                    New chat
+                  </button>
+                </div>
+
+                {loadingConversations ? (
+                  <div className="flex items-center justify-center py-10 text-muted">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : conversations.length === 0 ? (
+                  <p className="text-xs text-muted text-center py-10 px-4 leading-relaxed">
+                    No conversations yet. Ask EVO something and it will appear
+                    here.
+                  </p>
+                ) : (
+                  conversations.map((conv) => {
+                    const active = conv.id === conversationId;
+                    return (
+                      <button
+                        key={conv.id}
+                        onClick={() => void openConversation(conv.id)}
+                        aria-current={active}
+                        className={`w-full text-left px-3 py-2.5 rounded-[var(--radius-input)] transition-colors cursor-pointer
+                          ${active
+                            ? 'bg-accent-soft text-ink'
+                            : 'bg-paper-2 hover:bg-paper-3 border border-rule text-ink'}`}
+                      >
+                        <p className="text-xs leading-snug line-clamp-2">
+                          {conv.preview ?? 'New conversation'}
+                        </p>
+                        <p className="text-[11px] text-muted mt-1">
+                          {conv.message_count}{' '}
+                          {conv.message_count === 1 ? 'message' : 'messages'}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
             {/* Chat Dialogue Messages scrolling area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className={`flex-1 overflow-y-auto p-4 space-y-4 ${showConversations ? 'hidden' : ''}`}>
               {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center space-y-4 px-6">
                   <div className="w-12 h-12 bg-accent-soft text-accent-strong rounded-[var(--radius-card)] flex items-center justify-center">

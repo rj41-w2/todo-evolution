@@ -64,6 +64,40 @@ class Message(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
+# --- Conversation listing (issue #13) -------------------------------------
+
+
+class ConversationSummary(BaseModel):
+    """One row in the user's conversation list.
+
+    `preview` is the thread's last message: what a user recognises a chat by.
+    It is None for a conversation that has never been written to — those still
+    appear, because hiding one reads as the app losing work the user just did.
+    """
+
+    id: uuid.UUID
+    preview: Optional[str] = None
+    message_count: int = 0
+    created_at: datetime
+    last_activity_at: Optional[datetime] = None
+
+
+class ConversationListResponse(BaseModel):
+    conversations: List[ConversationSummary] = []
+
+
+class MessageOut(BaseModel):
+    id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime
+
+
+class ConversationMessagesResponse(BaseModel):
+    conversation_id: uuid.UUID
+    messages: List[MessageOut] = []
+
+
 # --- Pydantic Schemas ---
 
 class TaskBase(BaseModel):
