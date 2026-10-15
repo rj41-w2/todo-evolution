@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "[P0] Lock down MCP task access — MCP publishes 8001:8001 to host with no auth and every tool takes user_id as a caller-supplied argument"
 created: 2026-10-15
 updated: 2026-10-15
