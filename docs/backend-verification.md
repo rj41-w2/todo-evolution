@@ -109,6 +109,18 @@ to the database cannot:
 seams: that Better Auth's `user` table has the shape the backend assumes, and
 that the database sits on a revision this repository actually knows about.
 
+`tests/test_chat_failure.py` covers what a failed AI turn leaves behind:
+
+- the user's message is still there — the route commits it before calling the
+  model, so an outage costs the reply, not the input
+- no assistant message is written for a turn that produced none
+- the conversation still exists and a later successful turn joins it, rather
+  than every outage silently splitting the user's history
+- an unauthorized request writes nothing at all, not even the input
+
+The first two were shown red against the pre-#12 code, where a failed turn
+rolled the user's message back with everything else.
+
 ## Container startup
 
 The integration job also builds the image the backend ships and runs it:
