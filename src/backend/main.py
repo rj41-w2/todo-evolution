@@ -262,7 +262,11 @@ def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
     
     task_repo.delete(db_task)
-    task_repo.session.commit()
+    # No explicit commit: `get_db` owns the transaction. This route used to be
+    # the only one that committed by hand, reaching past the repository into
+    # `task_repo.session` — which is not part of the narrow `TaskRepository`
+    # protocol. That inconsistency is why DELETE persisted while POST and PUT
+    # silently did not.
     return None
 
 @app.post("/api/{user_id}/chat", response_model=ChatResponse)
