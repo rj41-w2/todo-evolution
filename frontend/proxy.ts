@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const sessionToken = request.cookies.get("better-auth.session_token")?.value;
+  const sessionToken =
+    request.cookies.get("__Secure-better-auth.session_token")?.value
+    ?? request.cookies.get("better-auth.session_token")?.value;
   const { pathname } = request.nextUrl;
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/api/auth");
   const isStaticFile = pathname.startsWith("/_next") || pathname.startsWith("/favicon.ico");
