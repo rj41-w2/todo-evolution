@@ -83,7 +83,12 @@ jobs:
           python-version: "3.10"
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 24, matching the frontend image (`FROM node:24-bookworm-slim`).
+          # `npx auth` pulls in chevrotain, which calls `Object.groupBy` — a
+          # Node 21+ API. Running the auth migration on Node 20 failed with
+          # `TypeError: Object.groupBy is not a function`. More to the point,
+          # the migration should run on the runtime it actually ships on.
+          node-version: 24
       - run: pip install --default-timeout=100 --retries 5 -r requirements.txt -r requirements-dev.txt
       # Better Auth owns `user`, `session`, `account`, `verification` and
       # `jwks`. The application tables have foreign keys into `user`, so this
