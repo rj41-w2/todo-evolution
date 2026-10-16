@@ -166,3 +166,39 @@ funnel: `backend: condition: service_healthy`.
   structurally gone: the browsers' first request cannot beat a not-yet-ready
   backend because the frontend container does not even start before it.
 - App verified end-to-end post-restart (sign-in → 200, tasks rows 5).
+
+## Pending (deferral exists because these need either the user present, or
+## measurements which only make sense after they run them)
+
+1. **Step 3 — Neon us-east-1 → aws-ap-southeast-1 (Singapore).** Approuved, not
+   executed yet. Recipe from the original plan: new project PG 17 in
+   Singapore → `pg_dump -Fc` from the old URL → `pg_restore --no-owner` into
+   the new one → verify `alembic current` == head and row counts → swap
+   `DATABASE_URL` in `.env` → full manual pass (login, tasks, chat turn) →
+   **keep the old project until then**; deleting it is destructive and needs
+   the user's explicit go-ahead. Expected: RTT 382ms → ~175ms (both measured
+   2026-10-16), tasks ~0.7s → ~0.35s, cold-wake penalty halved. Only `.env`
+   holds the host — verified nothing in the repo hardcodes it.
+2. **Step 3b (alternative / interim)** — keep Neon warm without moving: raise
+   the suspend timeout (or disable scale-to-zero) in the console, or point an
+   uptime monitor at `/ready` every 3–4 min (it already does a real DB check).
+   Kills the wake penalty, leaves the RTT as-is.
+3. **Step 5 — backend read path (deferred by decision).** Only if numbers
+   still justify it after Step 3. Do NOT remove `pool_pre_ping` (known
+   SSL-closed failure mode). `get_db` commits on every request including
+   reads ≈ 1 extra RTT per GET; the naive `session.new/dirty/deleted` check is
+   wrong because repositories only `flush()` (flush empties those sets — the
+   exact regression class the backend AGENTS.md warns about). Correct shape:
+   `repositories/base.py` marks `session.info["wrote"] = True` on
+   create/update/delete, `get_db` commits only when set. Guardable by counting
+   connection commits (`event.listens_for(engine, "commit")`) — GET must be 0,
+   POST ≥ 1, plus `test_task_persistence.py` green.
+4. **Optional micro** — warm `jwks_client` in the backend lifespan
+   (`jwks_client.get_jwk_set()`) so the first user request never pays the JWKS
+   fetch; DB warm-up there has no effect while Neon still suspends.
+
+Harness note: the measurement scripts live in `/tmp/opencode/perf/waterfall.sh`
+with the `bench@evoperf.local` cookie jar and token — /tmp is ephemeral, so on
+a new run recreate: sign in once to a fresh cookie jar, then
+`get-session → token → tasks` timings via `curl -w %{time_total}`. The bench
+user in Neon persists.
