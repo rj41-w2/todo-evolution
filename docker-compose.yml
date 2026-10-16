@@ -34,6 +34,17 @@ services:
     depends_on:
       auth-migrate:
         condition: service_completed_successfully
+    # Liveness-only probe. Deliberately /health, NOT /ready: /ready calls the
+    # JWKS endpoint on the *frontend*, and the frontend below waits for the
+    # backend to be healthy — gating that dependency on /ready would deadlock
+    # the whole stack (each side waiting for the other to start).
+    # start_period covers `alembic upgrade head` against a suspended Neon.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
     networks:
       - todo-network
 
@@ -50,7 +61,8 @@ services:
       - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
       - INTERNAL_BACKEND_URL=http://backend:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - todo-network
 

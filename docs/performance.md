@@ -50,6 +50,8 @@ real user gets on every reload:**
 **Docker boot:** `compose down` 5s; `up → both containers healthy` = **26s**.
 First waterfall after boot: TOTAL **8.92s**.
 
+(Pre-Step-4 numbers; see below for the healthcheck gate added in Step 4.)
+
 **User's original observation (DevTools screenshot, Chrome):** DOMContentLoaded 643ms,
 Load 1.16s, `Finish 16.67s`, 30 requests. Consistent with the data: the app's own
 waterfall is ~6–9s and the browser additionally pays `TasksProvider`'s **duplicate**
@@ -145,3 +147,22 @@ once per 10 minutes rather than per request.
 
 Method note: the waterfall always pays a fresh `/api/auth/token`; the deployed
 client caches it, so real in-app totals are at or below these numbers.
+
+## Post Step 4 (2026-10-16 ~17:47 UTC)
+
+`docker-compose.yml` now has healthchecks, and the frontend `depends_on` is the
+funnel: `backend: condition: service_healthy`.
+
+- backend probe = **`/health` deliberately, not `/ready`**: `/ready` calls the
+  frontend's JWKS endpoint, and the frontend waits on the backend — gating that
+  dependency on `/ready` would deadlock the stack. `/health` is dependency-free
+  (liveness), matching the separation already documented in backend AGENTS.md.
+- `start_period: 90s` covers `alembic upgrade head` + startup checks against a
+  suspended Neon; `python -c 'urllib.request...'` because slim images ship no
+  curl.
+- Measured: `docker compose up -d --wait` → both healthy in **27s**; first
+  waterfall after boot TOTAL 1.48s (delayed Next cold path only 0.2s), steady
+  **1.18s** — the "open the app right after `up` and it was random" failure is
+  structurally gone: the browsers' first request cannot beat a not-yet-ready
+  backend because the frontend container does not even start before it.
+- App verified end-to-end post-restart (sign-in → 200, tasks rows 5).
