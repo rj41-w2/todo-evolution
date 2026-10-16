@@ -2,6 +2,7 @@ import os
 import sys
 import uuid
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -14,6 +15,7 @@ import sqlalchemy as sa
 logger = logging.getLogger("uvicorn.error")
 import jwt
 from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientError
 
 import json
 import openai
@@ -90,7 +92,61 @@ def get_openai_client() -> openai.AsyncOpenAI:
         )
     return _openai_client
 
-app = FastAPI(title="Todo API (Phase II - Authenticated)", version="2.0.0")
+
+# --- Startup / Readiness state ---------------------------------------------
+
+# Holds the result of startup checks. Populated by lifespan, read by /ready.
+# True = all passed, False = at least one failed, None = not run yet.
+_startup_checks_passed: bool | None = None
+
+
+def _set_startup_checks_result(passed: bool) -> None:
+    global _startup_checks_passed
+    _startup_checks_passed = passed
+
+
+def _get_startup_checks_result() -> bool | None:
+    return _startup_checks_passed
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Run startup checks on application startup.
+
+    Issue #3/#11. `startup_checks.run_all_checks()` was documented as a
+    "fails fast" gate but nothing called it. The lifespan now invokes it and
+    caches the result for /ready. A failure does NOT crash the process — it
+    logs a critical error and marks readiness as failed. Liveness (/health)
+    stays ok so orchestrators don't restart endlessly.
+    """
+    global _startup_checks_passed
+
+    # Import here to avoid circular import at module level
+    from startup_checks import run_all_checks
+
+    logger.info("Running external seam startup checks...")
+    passed = run_all_checks()
+    _startup_checks_passed = passed
+
+    if not passed:
+        logger.critical(
+            "Startup checks FAILED. Backend will report not ready. "
+            "Fix: run `npx auth@latest migrate` in frontend/ and ensure DB is reachable."
+        )
+    else:
+        logger.info("All startup checks PASSED.")
+
+    yield
+
+    # Shutdown: nothing special needed
+    logger.info("Application shutting down.")
+
+
+app = FastAPI(
+    title="Todo API (Phase II - Authenticated)",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
 # CORS Middleware configuration
 cors_origins = os.getenv("CORS_ORIGINS")
@@ -141,11 +197,20 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
             status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Authorization token has expired"
         )
-    except jwt.InvalidTokenError as e:
+    except jwt.InvalidTokenError:
         # Do not expose token validation details to clients or logs.
         raise HTTPException(
             status_code=http_status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token"
+        )
+    except PyJWKClientError as e:
+        # JWKS errors (network, key not found, malformed JWKS) -> 503.
+        # This is a service configuration/availability issue, not a bad token.
+        # The client cannot fix it by getting a new token.
+        logger.warning("JWKS error during token verification: %s", e)
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service temporarily unavailable"
         )
 
 # --- Repository Dependencies ---
@@ -174,7 +239,73 @@ def root():
 
 @app.get("/health")
 def health():
+    """Liveness probe — process is up. Does NOT check dependencies.
+
+    Kubernetes/container orchestrators use this to know if the process is
+    alive. It must NOT check DB, JWKS, or startup checks — those are
+    readiness concerns (/ready).
+    """
     return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready():
+    """Readiness probe — all dependencies healthy and startup checks passed.
+
+    Checks:
+    - Database connection (engine.connect())
+    - JWKS endpoint reachable (HTTP GET)
+    - Startup checks passed (cached from lifespan)
+
+    Returns 200 with {"ready": true} when all healthy.
+    Returns 503 with {"ready": false, "detail": "..."} naming the failed
+    dependency when any check fails.
+    """
+    import httpx
+
+    # 1. Startup checks
+    startup = _get_startup_checks_result()
+    if startup is False:
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Startup checks failed. Run `npx auth@latest migrate` in frontend/."
+        )
+    if startup is None:
+        # Should not happen — lifespan runs before first request
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Startup checks not yet run"
+        )
+
+    # 2. Database
+    try:
+        from database import engine
+        with engine.connect() as conn:
+            conn.execute(sa.text("SELECT 1"))
+    except Exception as e:
+        logger.warning("Readiness DB check failed: %s", e)
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database unreachable: {e}"
+        )
+
+    # 3. JWKS reachable
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(JWKS_URL)
+            resp.raise_for_status()
+            # Validate it's actually JWKS (has "keys" array)
+            data = resp.json()
+            if not isinstance(data.get("keys"), list):
+                raise ValueError("JWKS response missing 'keys' array")
+    except Exception as e:
+        logger.warning("Readiness JWKS check failed: %s", e)
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"JWKS unreachable: {e}"
+        )
+
+    return {"ready": True}
 
 @app.get("/api/{user_id}/conversations", response_model=ConversationListResponse)
 def list_conversations(

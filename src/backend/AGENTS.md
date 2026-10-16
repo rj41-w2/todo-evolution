@@ -16,8 +16,8 @@ database.py        engine, SessionLocal, get_db — the transaction boundary
 mcp_server.py      MCP tools, built by build_server(user_id)
 repositories/      narrow Protocols + SQLAlchemy implementations
 migrations/        Alembic; versions/ holds the chain
-user_stub.py       Better Auth's `user` table, registered so FKs resolve
-startup_checks.py  dead code — see issue #11, nothing calls it
+user_stub.py          Better Auth's `user` table, registered so FKs resolve
+startup_checks.py       external seam checks, invoked by FastAPI lifespan (issue #3/#11)
 ```
 
 ## Running it
@@ -95,6 +95,23 @@ closure. `stdio_client` does not inherit `DATABASE_URL`; pass it explicitly.
 a mock confirms just as happily about a write rolled back a millisecond later.
 Anything claiming a row exists must read it back through a fresh session.
 
+**Startup checks run on lifespan, not at import.** `startup_checks.run_all_checks()`
+is invoked by FastAPI's `lifespan` context manager. A failure logs critical and
+marks `/ready` as 503, but `/health` (liveness) stays 200 so orchestrators don't
+restart the process endlessly. The old docstring said "fails fast" implying
+process exit — that was wrong; the process stays up, readiness fails.
+
+**JWKS errors map to 503, not 401.** `PyJWKClientError` (network failure, key
+rotation, malformed JWKS) means the *authentication service* is unavailable,
+not that the token is bad. The client cannot fix it by getting a new token.
+`get_current_user` catches `PyJWKClientError` and raises `HTTPException(503)`.
+Expired/invalid tokens stay 401.
+
+**`/health` vs `/ready` are distinct.** `/health` = process alive (liveness).
+`/ready` = dependencies healthy (DB, JWKS, startup checks passed). They serve
+different orchestration concerns: liveness for "is the process running",
+readiness for "should traffic be sent here".
+
 ## Guards
 
 | File | Claims | Needs a DB? |
@@ -107,6 +124,9 @@ Anything claiming a row exists must read it back through a fresh session.
 | `test_persistence_invariants.py` | the database refuses what it should | yes |
 | `test_conversation_listing.py` | conversations are findable and owner-scoped | yes |
 | `test_retrieval_scaling.py` | task reads are ordered, bounded, paged, and index-served | yes |
+| `test_startup_readiness_hermetic.py` | startup runs, readiness gates, JWKS→503, expired→401 | no |
+| `test_startup_readiness_integration.py` | /ready checks real DB/JWKS, startup checks integrate | yes |
+| `test_external_seams.py` | Better Auth `user` table + backend FKs valid | yes |
 | `test_migration_drift.py` | the database sits on a revision this repo knows | yes |
 
 Each was written to fail against the code it replaced before being trusted. A

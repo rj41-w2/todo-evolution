@@ -11,10 +11,14 @@ from models import Task, StatusEnum, PriorityEnum
 from repositories.task_repository import TaskRepository
 
 
-client = TestClient(app)
+@pytest.fixture
+def client():
+    """TestClient that runs lifespan per test, not at import time."""
+    with TestClient(app) as c:
+        yield c
 
 
-def test_get_tasks_uses_repository_not_session(auth_as_tenant):
+def test_get_tasks_uses_repository_not_session(auth_as_tenant, client):
     """Proof-of-concept: endpoint calls TaskRepository.list_page_by_user, not db.query()."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_task = Task(
@@ -54,7 +58,7 @@ def test_get_tasks_uses_repository_not_session(auth_as_tenant):
         app.dependency_overrides.clear()
 
 
-def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
+def test_get_tasks_filters_by_status_and_priority(auth_as_tenant, client):
     """Repository receives filter params correctly."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_repo.list_page_by_user.return_value = ([], False)
@@ -75,7 +79,7 @@ def test_get_tasks_filters_by_status_and_priority(auth_as_tenant):
         app.dependency_overrides.clear()
 
 
-def test_get_tasks_returns_empty_list_when_no_tasks(auth_as_tenant):
+def test_get_tasks_returns_empty_list_when_no_tasks(auth_as_tenant, client):
     """Empty result from repository returns empty list."""
     mock_repo = MagicMock(spec=TaskRepository)
     mock_repo.list_page_by_user.return_value = ([], False)

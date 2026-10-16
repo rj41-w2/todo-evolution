@@ -1,7 +1,11 @@
 """Startup checks for external seam integrity.
 
 Run at application startup to verify that external tables (owned by Better Auth)
-have the expected structure. Fails fast if contract is violated.
+have the expected structure. Results are logged and fed to the `/ready`
+endpoint. A failure marks the service as *not ready* (503 on `/ready`) but
+does NOT crash the process — liveness (`/health`) stays ok so orchestrators
+don't restart endlessly. This is intentional: a missing `npx auth migrate`
+step should be visible and actionable, not an opaque crash loop.
 """
 
 import logging
@@ -41,15 +45,52 @@ def check_user_table_exists() -> bool:
 
 
 def check_fk_resolution() -> bool:
-    """Verify backend FKs can resolve `user.id` by attempting a dummy query."""
+    """Verify backend FKs to `user.id` are declared and resolvable.
+
+    Inspects the FK metadata on `tasks`, `conversations`, `messages` to ensure:
+    - Each has exactly one FK to `user`
+    - The referenced column is `id`
+    - ON DELETE CASCADE is set
+
+    This catches schema drift (e.g., a migration that dropped the FK) that
+    `SELECT 1 FROM "user"` would miss entirely.
+    """
     try:
-        with engine.connect() as conn:
-            # This will fail if FK target doesn't exist or type mismatches
-            conn.execute(text("SELECT 1 FROM \"user\" LIMIT 1"))
-        logger.info("External seam check PASSED: `user.id` FK target queryable.")
+        inspector = inspect(engine)
+
+        for table_name in ("tasks", "conversations", "messages"):
+            fks = inspector.get_foreign_keys(table_name)
+            user_fks = [fk for fk in fks if fk["referred_table"] == "user"]
+
+            if len(user_fks) != 1:
+                logger.error(
+                    "External seam check FAILED: %s has %d FKs to user (expected 1)",
+                    table_name,
+                    len(user_fks),
+                )
+                return False
+
+            fk = user_fks[0]
+            if fk["referred_columns"] != ["id"]:
+                logger.error(
+                    "External seam check FAILED: %s.user_id references %s, expected user.id",
+                    table_name,
+                    fk["referred_columns"],
+                )
+                return False
+
+            if fk["options"].get("ondelete") != "CASCADE":
+                logger.error(
+                    "External seam check FAILED: %s.user_id FK missing ON DELETE CASCADE",
+                    table_name,
+                )
+                return False
+
+        logger.info("External seam check PASSED: backend FKs to user.id declared with CASCADE.")
         return True
+
     except Exception as e:
-        logger.error("External seam check FAILED: Cannot query `user` table: %s", e)
+        logger.error("External seam check ERROR: Could not inspect backend FKs: %s", e)
         return False
 
 
