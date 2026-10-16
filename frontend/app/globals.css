@@ -405,6 +405,43 @@
   transform: none;
 }
 
+/* Danger: `--color-danger` text over the ghost surface, never a filled red
+   button (docs/design.md "CTA voice"). The hover tint is the only colour that
+   changes, matching `.icon-btn-danger`. */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  height: 44px;
+  padding-inline: var(--space-md);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-rule-2);
+  background: var(--color-paper);
+  color: var(--color-danger);
+  font-weight: 500;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-short) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.btn-danger:hover {
+  background: var(--color-danger-soft);
+}
+
+.btn-danger:active {
+  transform: translateY(1px);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;

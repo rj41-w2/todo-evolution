@@ -63,8 +63,46 @@ def test_list_returns_the_paged_envelope_and_calls_the_repository(auth_as_tenant
         # Envelope, not a bare array: a bare array cannot express "there is more".
         assert payload["goals"][0]["title"] == "ONE"
         assert payload["next_cursor"] is None
-        # Owner is taken from the verified identity and always filtered on.
-        repo.list_page_by_user.assert_called_once_with("test-user", None, 50)
+        # Owner is taken from the verified identity and always filtered on; no
+        # `status` means the `All` tab, which sends `None` rather than a sentinel.
+        repo.list_page_by_user.assert_called_once_with("test-user", None, 50, None)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_passes_a_status_filter_through_to_the_repository(auth_as_tenant, client):
+    repo = _mock_repo()
+    repo.list_page_by_user.return_value = ([], False)
+    app.dependency_overrides[get_goal_repo] = lambda: repo
+
+    try:
+        response = client.get(
+            "/api/test-user/goals?status=Completed",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 200, response.text
+        # The mapped status reaches the query with the owner, so the filter is
+        # applied server-side across every page, not to one client page.
+        _args, _kwargs = repo.list_page_by_user.call_args
+        assert _args[0] == "test-user"
+        assert _args[3] == GoalStatusEnum.COMPLETED
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_list_refuses_an_unknown_status_instead_of_ignoring_it(auth_as_tenant, client):
+    repo = _mock_repo()
+    app.dependency_overrides[get_goal_repo] = lambda: repo
+
+    try:
+        response = client.get(
+            "/api/test-user/goals?status=Sideways",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        # Silently dropping an unknown filter would show All under an Active
+        # tab — a wrong answer dressed as a successful one.
+        assert response.status_code == 422, response.text
+        repo.list_page_by_user.assert_not_called()
     finally:
         app.dependency_overrides.clear()
 
@@ -207,6 +245,43 @@ def test_updating_a_goal_that_is_not_the_callers_is_a_404(auth_as_tenant, client
         app.dependency_overrides.clear()
 
 
+# --- Deleting ---------------------------------------------------------------
+
+
+def test_delete_removes_the_callers_own_goal(auth_as_tenant, client):
+    repo = _mock_repo()
+    existing = _goal()
+    repo.get_by_id_and_user.return_value = existing
+    app.dependency_overrides[get_goal_repo] = lambda: repo
+
+    try:
+        response = client.delete(
+            f"/api/test-user/goals/{existing.id}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 204, response.text
+        assert response.content == b""
+        repo.delete.assert_called_once_with(existing)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_deleting_a_goal_that_is_not_the_callers_is_a_404(auth_as_tenant, client):
+    repo = _mock_repo()
+    repo.get_by_id_and_user.return_value = None
+    app.dependency_overrides[get_goal_repo] = lambda: repo
+
+    try:
+        response = client.delete(
+            f"/api/test-user/goals/{uuid4()}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 404, response.text
+        repo.delete.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
 # --- Tenant boundary --------------------------------------------------------
 
 
@@ -241,5 +316,22 @@ def test_a_mismatched_identity_cannot_create_a_goal(client):
         )
         assert response.status_code == 403, response.text
         repo.create.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_a_mismatched_identity_cannot_delete_a_goal(client):
+    repo = _mock_repo()
+    app.dependency_overrides[get_current_user] = lambda: "someone-else"
+    app.dependency_overrides[get_goal_repo] = lambda: repo
+
+    try:
+        response = client.delete(
+            f"/api/test-user/goals/{uuid4()}",
+            headers={"Authorization": "Bearer fake-token"},
+        )
+        assert response.status_code == 403, response.text
+        repo.get_by_id_and_user.assert_not_called()
+        repo.delete.assert_not_called()
     finally:
         app.dependency_overrides.clear()

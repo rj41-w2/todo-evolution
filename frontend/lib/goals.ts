@@ -1,4 +1,4 @@
-import type { GoalStatus } from '../types';
+import type { Goal, GoalStatus } from '../types';
 
 /**
  * The four goal statuses, in the order the create form and the editors offer
@@ -6,6 +6,37 @@ import type { GoalStatus } from '../types';
  * disagree about the set (issue #17).
  */
 export const GOAL_STATUSES: readonly GoalStatus[] = ['Draft', 'Active', 'Paused', 'Completed'];
+
+/**
+ * The lifecycle filters the Goals page offers (issue #18).
+ *
+ * `Done` is a UI word for the `Completed` status — the tab label and the stored
+ * status are deliberately different names, and `goalStatusForFilter` is the one
+ * place that translates between them. `All` is not a status: it means "send no
+ * filter at all", which is why it maps to `null` rather than to a real value.
+ */
+export type GoalFilter = 'All' | 'Active' | 'Done' | 'Draft' | 'Paused';
+
+/** Tab order on the Goals page: broadest first, then by lifecycle. */
+export const GOAL_FILTERS: readonly GoalFilter[] = ['All', 'Active', 'Done', 'Draft', 'Paused'];
+
+/**
+ * The status a filter narrows to, or `null` for `All`.
+ *
+ * `Done → Completed` because that is the only mapping the stored enum does not
+ * already make; every other filter is its own status.
+ */
+export function goalStatusForFilter(filter: GoalFilter): GoalStatus | null {
+  if (filter === 'All') return null;
+  if (filter === 'Done') return 'Completed';
+  return filter;
+}
+
+/** Whether a goal belongs in the current filter's result set. */
+export function goalMatchesFilter(goal: Goal, filter: GoalFilter): boolean {
+  const status = goalStatusForFilter(filter);
+  return status === null || goal.status === status;
+}
 
 /**
  * The status pill's modifier class.

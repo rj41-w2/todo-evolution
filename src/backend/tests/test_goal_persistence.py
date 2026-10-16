@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from database import SessionLocal, engine
 from main import app, get_current_user
-from models import Goal
+from models import Goal, GoalStatusEnum
 
 pytestmark = pytest.mark.integration
 
@@ -40,6 +40,13 @@ def tenants():
                 ),
                 {"id": uid, "name": uid, "email": email},
             )
+        # Start from a clean slate. Teardown cascades these rows away, but a run
+        # that was killed before teardown leaves them behind, and then the next
+        # run's "POST created exactly one goal" assertion sees a previous run's
+        # seeds. Clearing at setup makes the suite self-healing.
+        conn.execute(
+            sa.text("DELETE FROM goals WHERE user_id IN (:a, :b)"), {"a": ALICE, "b": BOB}
+        )
 
     try:
         yield
@@ -254,6 +261,140 @@ def test_goals_come_back_newest_first_and_page_exactly_once_each(tenants):
         seen = _walk_pages(page_size=3)
         assert len(seen) == 10, f"paging visited {len(seen)} of 10 goals"
         assert len(set(seen)) == 10, f"paging repeated a goal: {seen}"
+    finally:
+        _reset_auth()
+
+
+# --- Filtering and filtered paging (issue #18) ------------------------------
+
+
+def _seed_mixed_statuses(counts: dict[str, int]) -> None:
+    """Seed Alice's goals with the given statuses, newest first by creation.
+
+    `created_at` runs opposite to insertion order and the statuses interleave, so
+    a query that filters client-side, or that filters after the page boundary,
+    cannot return the right rows by accident.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    rows: list[tuple[str, GoalStatusEnum]] = []
+    for status_name, n in counts.items():
+        rows.extend((str(uuid.uuid4()), GoalStatusEnum(status_name)) for _ in range(n))
+
+    with SessionLocal() as session:
+        for i, (gid, status) in enumerate(rows):
+            session.add(
+                Goal(
+                    id=gid,
+                    user_id=ALICE,
+                    title=f"{status.value} {i:02}",
+                    status=status,
+                    created_at=base + timedelta(minutes=len(rows) - 1 - i),
+                )
+            )
+        session.commit()
+
+
+def _walk_filtered_pages(status: str, page_size: int) -> list[str]:
+    client = TestClient(app)
+    seen: list[str] = []
+    cursor = None
+    for _ in range(50):
+        query = f"limit={page_size}&status={status}" + (f"&cursor={cursor}" if cursor else "")
+        page = client.get(f"/api/{ALICE}/goals?{query}").json()
+        seen.extend(g["id"] for g in page["goals"])
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+    return seen
+
+
+def test_a_status_filter_returns_only_matching_owner_goals(tenants):
+    try:
+        _as(ALICE)
+        _seed_mixed_statuses({"Draft": 2, "Active": 3, "Completed": 1})
+        client = TestClient(app)
+
+        active = client.get(f"/api/{ALICE}/goals?status=Active").json()["goals"]
+        assert {g["status"] for g in active} == {"Active"}
+        assert len(active) == 3
+
+        # No filter is the `All` tab: every status, nothing dropped.
+        everything = client.get(f"/api/{ALICE}/goals").json()["goals"]
+        assert len(everything) == 6
+        assert {g["status"] for g in everything} == {"Draft", "Active", "Completed"}
+    finally:
+        _reset_auth()
+
+
+def test_filtered_paging_visits_every_match_exactly_once(tenants):
+    try:
+        _as(ALICE)
+        # Seven Active goals surrounded by other statuses, so a filter applied
+        # after the page boundary would leak a non-matching row into a page.
+        _seed_mixed_statuses({"Draft": 4, "Active": 7, "Paused": 3, "Completed": 5})
+
+        seen = _walk_filtered_pages("Active", page_size=2)
+        assert len(seen) == 7, f"paging visited {len(seen)} of 7 Active goals"
+        assert len(set(seen)) == 7, f"paging repeated a goal: {seen}"
+
+        client = TestClient(app)
+        statuses = {
+            g["id"]: g["status"]
+            for g in client.get(f"/api/{ALICE}/goals?limit=50&status=Active").json()["goals"]
+        }
+        assert set(statuses) == set(seen)
+        assert all(s == "Active" for s in statuses.values())
+    finally:
+        _reset_auth()
+
+
+# --- Deleting (issue #18) ---------------------------------------------------
+
+
+def test_delete_removes_the_row_after_commit(tenants):
+    """204 must mean the row is gone, and a repeat delete must be a 404."""
+    try:
+        client = _as(ALICE)
+        created = client.post(f"/api/{ALICE}/goals", json={"title": "GONE"}).json()
+
+        response = client.delete(f"/api/{ALICE}/goals/{created['id']}")
+        assert response.status_code == 204, response.text
+        assert _stored(ALICE) == [], "DELETE answered 204 but the row is still there"
+
+        again = client.delete(f"/api/{ALICE}/goals/{created['id']}")
+        assert again.status_code == 404, again.text
+    finally:
+        _reset_auth()
+
+
+def test_a_tenant_cannot_delete_another_tenants_goal(tenants):
+    """Bob's own URL, Alice's known id: 404, and Alice's row survives."""
+    try:
+        alice = _as(ALICE)
+        created = alice.post(f"/api/{ALICE}/goals", json={"title": "ALICE PRIVATE"}).json()
+
+        app.dependency_overrides[get_current_user] = lambda: BOB
+        bob = TestClient(app)
+        response = bob.delete(f"/api/{BOB}/goals/{created['id']}")
+
+        assert response.status_code == 404, response.text
+        assert [g.title for g in _stored(ALICE)] == ["ALICE PRIVATE"]
+    finally:
+        _reset_auth()
+
+
+def test_delete_with_a_mismatched_url_identity_is_a_403(tenants):
+    try:
+        alice = _as(ALICE)
+        created = alice.post(f"/api/{ALICE}/goals", json={"title": "KEEP"}).json()
+
+        # Authenticated as Alice, but the URL names Bob: refused before lookup.
+        response = alice.delete(f"/api/{BOB}/goals/{created['id']}")
+
+        assert response.status_code == 403, response.text
+        assert [g.title for g in _stored(ALICE)] == ["KEEP"]
     finally:
         _reset_auth()
 

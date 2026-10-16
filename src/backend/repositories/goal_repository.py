@@ -11,7 +11,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from models import Goal
+from models import Goal, GoalStatusEnum
 from paging import DEFAULT_LIMIT
 from repositories.base import Repository, SqlRepository
 
@@ -24,6 +24,7 @@ class GoalRepository(Repository[Goal], Protocol):
         user_id: str,
         after: tuple[datetime, UUID] | None = None,
         limit: int = DEFAULT_LIMIT,
+        status: GoalStatusEnum | None = None,
     ) -> tuple[list[Goal], bool]: ...
 
     def get_by_id_and_user(self, goal_id: UUID, user_id: str) -> Goal | None: ...
@@ -46,6 +47,7 @@ class SqlGoalRepository(SqlRepository[Goal]):
         user_id: str,
         after: tuple[datetime, UUID] | None = None,
         limit: int = DEFAULT_LIMIT,
+        status: GoalStatusEnum | None = None,
     ) -> tuple[list[Goal], bool]:
         """One page of a user's goals, newest first, and whether more remain.
 
@@ -57,10 +59,18 @@ class SqlGoalRepository(SqlRepository[Goal]):
         page boundary can fall between rows the database did not promise to
         order, and cursor paging then repeats or skips a goal.
 
+        `status` is an optional lifecycle filter (issue #18). It is applied to
+        the query *before* the keyset predicate, so a page holds only matches
+        and the cursor never walks past a goal of another status. `None` means
+        "every status" — the `All` tab omits the predicate entirely rather than
+        matching a sentinel value.
+
         Served by `ix_goals_user_created_at_id` (user_id, created_at DESC,
         id DESC).
         """
         query = self._session.query(Goal).filter(Goal.user_id == user_id)
+        if status is not None:
+            query = query.filter(Goal.status == status)
         if after is not None:
             created_at, identifier = after
             query = query.filter(

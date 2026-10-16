@@ -73,4 +73,94 @@ describe('GoalList', () => {
     expect(edited.title).toBe('BEFORE');
     expect(patch.title).toBe('AFTER');
   });
+
+  it('words the empty state honestly while a filter is active', () => {
+    renderList({ goals: [], filter: 'Active' });
+    expect(screen.getByText('No goals match this filter.')).toBeTruthy();
+    expect(screen.queryByText('No goals yet.')).toBeNull();
+  });
+});
+
+describe('GoalList delete confirmation', () => {
+  it('deletes nothing until the confirmation is accepted', async () => {
+    const onDeleteGoal = vi.fn().mockResolvedValue(undefined);
+    renderList({ goals: [goal({ title: 'KEEP' })], onDeleteGoal });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete KEEP' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onDeleteGoal).not.toHaveBeenCalled();
+    expect(screen.getByText('KEEP')).toBeTruthy();
+  });
+
+  it('hands the confirmed goal to the shared source', async () => {
+    const onDeleteGoal = vi.fn().mockResolvedValue(undefined);
+    renderList({ goals: [goal({ title: 'GONE' })], onDeleteGoal });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete GONE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() =>
+      expect(onDeleteGoal).toHaveBeenCalledWith(expect.objectContaining({ title: 'GONE' })),
+    );
+  });
+
+  it('disables the actions while pending and never sends the delete twice', async () => {
+    let resolveDelete: () => void = () => {};
+    const onDeleteGoal = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          resolveDelete = resolve;
+        }),
+    );
+    renderList({ goals: [goal({ title: 'GONE' })], onDeleteGoal });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete GONE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    const pendingButton = await screen.findByRole('button', { name: 'Deleting…' });
+    expect(pendingButton.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Cancel' }).hasAttribute('disabled')).toBe(true);
+
+    // A second click on the disabled control must not fire a second request.
+    fireEvent.click(pendingButton);
+    expect(onDeleteGoal).toHaveBeenCalledTimes(1);
+
+    resolveDelete();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('closes on Escape without deleting', async () => {
+    const onDeleteGoal = vi.fn().mockResolvedValue(undefined);
+    renderList({ goals: [goal({ title: 'KEEP' })], onDeleteGoal });
+
+    const trigger = screen.getByRole('button', { name: 'Delete KEEP' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(onDeleteGoal).not.toHaveBeenCalled();
+  });
+
+  it('moves focus into the dialog and back to the trigger on cancel', async () => {
+    renderList({ goals: [goal({ title: 'KEEP' })], onDeleteGoal: vi.fn().mockResolvedValue(undefined) });
+
+    const trigger = screen.getByRole('button', { name: 'Delete KEEP' });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    // Focus lands inside the dialog (its first control is Cancel)...
+    await waitFor(() => expect(document.activeElement?.textContent).toBe('Cancel'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // ...and returns to the control that opened it.
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
 });

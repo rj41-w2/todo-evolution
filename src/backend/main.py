@@ -29,7 +29,7 @@ from models import (
     Conversation, Message, ChatRequest, ChatResponse, TaskListResponse,
     ConversationSummary, ConversationListResponse, MessageOut,
     ConversationMessagesResponse,
-    Goal, GoalCreate, GoalUpdate, GoalResponse, GoalListResponse,
+    Goal, GoalCreate, GoalUpdate, GoalResponse, GoalListResponse, GoalStatusEnum,
 )
 from repositories import (
     SqlTaskRepository, TaskRepository,
@@ -523,14 +523,14 @@ def delete_task(
     return None
 
 
-# --- Goals (issue #17) ------------------------------------------------------
+# --- Goals (issue #17, extended by #18) -------------------------------------
 #
 # Standalone personal goals, deliberately not connected to tasks. The routes
 # mirror the task routes' authorization exactly: the JWT subject must equal the
 # URL `user_id` (403 otherwise), and an id belonging to someone else is
 # indistinguishable from a missing one (404) because every lookup is scoped by
-# owner at the repository. There is no DELETE and no detail route — this issue
-# does not add them.
+# owner at the repository. Issue #18 adds an optional status filter to the list
+# and a delete route; there is still no detail route.
 
 
 @app.get("/api/{user_id}/goals", response_model=GoalListResponse)
@@ -538,14 +538,17 @@ def list_goals(
     user_id: str,
     limit: Optional[int] = None,
     cursor: Optional[str] = None,
+    status: Optional[GoalStatusEnum] = None,
     authenticated_user_id: str = Depends(get_current_user),
     goal_repo: GoalRepository = Depends(get_goal_repo),
 ):
-    """One page of a user's goals, newest first.
+    """One page of a user's goals, newest first, optionally filtered by status.
 
-    One list, no grouping or filtering by status: the status is shown on each
-    goal, and the agreed behavior is a single newest-first list. The status of a
-    goal can change without moving it.
+    `status` is a lifecycle filter (issue #18): omitted means "every status"
+    (`All`), any other value narrows the whole result set *before* keyset
+    pagination, so a page holds only matches and the cursor never walks past a
+    goal of another status. An unknown value is refused by validation as 422;
+    the filter is never silently ignored, which would show the wrong rows.
     """
     if authenticated_user_id != user_id:
         raise HTTPException(
@@ -560,7 +563,7 @@ def list_goals(
         # 400, not a silent restart — see the task list route and paging.py.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    rows, has_more = goal_repo.list_page_by_user(user_id, after, page_size)
+    rows, has_more = goal_repo.list_page_by_user(user_id, after, page_size, status)
 
     next_cursor = None
     if has_more and rows:
@@ -614,6 +617,36 @@ def update_goal(
         setattr(db_goal, key, value)
 
     return goal_repo.update(db_goal)
+
+
+@app.delete("/api/{user_id}/goals/{goal_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+def delete_goal(
+    user_id: str,
+    goal_id: uuid.UUID,
+    authenticated_user_id: str = Depends(get_current_user),
+    goal_repo: GoalRepository = Depends(get_goal_repo),
+):
+    """Remove one of the caller's own goals.
+
+    Identity is checked before anything is looked up (403), then the lookup is
+    owner-scoped so a goal that belongs to someone else is a 404 exactly like a
+    goal that does not exist — a known UUID is not a capability. Deletion goes
+    through the repository's `delete()` (flush only); `get_db` still owns the
+    commit, so the row is only gone once the request succeeded.
+    """
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    db_goal = goal_repo.get_by_id_and_user(goal_id, user_id)
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    goal_repo.delete(db_goal)
+    return None
+
 
 @app.post("/api/{user_id}/chat", response_model=ChatResponse)
 async def chat_with_agent(
