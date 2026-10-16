@@ -77,7 +77,7 @@ def test_metadata_registers_application_tables_and_the_user_seam():
 
     import models  # noqa: F401  registers tables on Base.metadata
 
-    expected = {"user", "tasks", "conversations", "messages"}
+    expected = {"user", "tasks", "goals", "conversations", "messages"}
     assert expected <= set(Base.metadata.tables)
 
 

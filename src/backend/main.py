@@ -29,9 +29,11 @@ from models import (
     Conversation, Message, ChatRequest, ChatResponse, TaskListResponse,
     ConversationSummary, ConversationListResponse, MessageOut,
     ConversationMessagesResponse,
+    Goal, GoalCreate, GoalUpdate, GoalResponse, GoalListResponse,
 )
 from repositories import (
     SqlTaskRepository, TaskRepository,
+    SqlGoalRepository, GoalRepository,
     SqlConversationRepository, ConversationRepository,
     SqlMessageRepository, MessageRepository,
 )
@@ -217,6 +219,10 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> str:
 
 def get_task_repo(db: Session = Depends(get_db)) -> TaskRepository:
     return SqlTaskRepository(db)
+
+
+def get_goal_repo(db: Session = Depends(get_db)) -> GoalRepository:
+    return SqlGoalRepository(db)
 
 
 def get_conversation_repo(db: Session = Depends(get_db)) -> ConversationRepository:
@@ -515,6 +521,99 @@ def delete_task(
     # protocol. That inconsistency is why DELETE persisted while POST and PUT
     # silently did not.
     return None
+
+
+# --- Goals (issue #17) ------------------------------------------------------
+#
+# Standalone personal goals, deliberately not connected to tasks. The routes
+# mirror the task routes' authorization exactly: the JWT subject must equal the
+# URL `user_id` (403 otherwise), and an id belonging to someone else is
+# indistinguishable from a missing one (404) because every lookup is scoped by
+# owner at the repository. There is no DELETE and no detail route — this issue
+# does not add them.
+
+
+@app.get("/api/{user_id}/goals", response_model=GoalListResponse)
+def list_goals(
+    user_id: str,
+    limit: Optional[int] = None,
+    cursor: Optional[str] = None,
+    authenticated_user_id: str = Depends(get_current_user),
+    goal_repo: GoalRepository = Depends(get_goal_repo),
+):
+    """One page of a user's goals, newest first.
+
+    One list, no grouping or filtering by status: the status is shown on each
+    goal, and the agreed behavior is a single newest-first list. The status of a
+    goal can change without moving it.
+    """
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    try:
+        page_size = clamp_limit(limit)
+        after = decode_cursor(cursor) if cursor else None
+    except InvalidCursor as exc:
+        # 400, not a silent restart — see the task list route and paging.py.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    rows, has_more = goal_repo.list_page_by_user(user_id, after, page_size)
+
+    next_cursor = None
+    if has_more and rows:
+        next_cursor = encode_cursor((rows[-1].created_at, rows[-1].id))
+
+    return GoalListResponse(
+        goals=[GoalResponse.model_validate(g) for g in rows],
+        next_cursor=next_cursor,
+    )
+
+
+@app.post("/api/{user_id}/goals", response_model=GoalResponse, status_code=http_status.HTTP_201_CREATED)
+def create_goal(
+    user_id: str,
+    goal: GoalCreate,
+    authenticated_user_id: str = Depends(get_current_user),
+    goal_repo: GoalRepository = Depends(get_goal_repo),
+):
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    # Owner comes from the verified path identity, never from the request body.
+    goal_data = goal.model_dump()
+    goal_data["user_id"] = user_id
+    return goal_repo.create(Goal(**goal_data))
+
+
+@app.put("/api/{user_id}/goals/{goal_id}", response_model=GoalResponse)
+def update_goal(
+    user_id: str,
+    goal_id: uuid.UUID,
+    goal_update: GoalUpdate,
+    authenticated_user_id: str = Depends(get_current_user),
+    goal_repo: GoalRepository = Depends(get_goal_repo),
+):
+    if authenticated_user_id != user_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Access denied: You cannot manage resources of another identity"
+        )
+
+    db_goal = goal_repo.get_by_id_and_user(goal_id, user_id)
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Goal not found")
+
+    update_data = goal_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_goal, key, value)
+
+    return goal_repo.update(db_goal)
 
 @app.post("/api/{user_id}/chat", response_model=ChatResponse)
 async def chat_with_agent(

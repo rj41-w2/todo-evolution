@@ -51,6 +51,41 @@ export interface TaskUpdate {
   due_date?: string | null;
 }
 
+/** Standalone personal goals (issue #17). Not connected to tasks. */
+export type GoalStatus = "Draft" | "Active" | "Paused" | "Completed";
+
+export interface Goal {
+  id: string;
+  title: string;
+  description: string | null;
+  /** A calendar date (`YYYY-MM-DD`), never a timestamp. */
+  target_date: string | null;
+  status: GoalStatus;
+  created_at: string;
+}
+
+export interface GoalCreate {
+  title: string;
+  description?: string | null;
+  target_date?: string | null;
+  status?: GoalStatus;
+}
+
+export interface GoalUpdate {
+  title?: string;
+  // `null` clears the field — the backend only touches the keys it receives.
+  description?: string | null;
+  target_date?: string | null;
+  status?: GoalStatus;
+}
+
+/** The goal list route's response, paged exactly like tasks. */
+export interface GoalListResponse {
+  goals: Goal[];
+  /** Opaque. Pass it back verbatim as `?cursor=`. null on the last page. */
+  next_cursor: string | null;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';

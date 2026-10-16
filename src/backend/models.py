@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
-from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Enum as SQLEnum, ForeignKey
+from sqlalchemy import Column, String, DateTime, Boolean, Text, Date, JSON, Enum as SQLEnum, ForeignKey, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from database import Base
 
@@ -24,6 +24,19 @@ class PriorityEnum(str, Enum):
 
 class StatusEnum(str, Enum):
     PENDING = "Pending"
+    COMPLETED = "Completed"
+
+class GoalStatusEnum(str, Enum):
+    """The four states a standalone goal can be in (issue #17).
+
+    A goal is not a task: it has no completion toggle and no link to tasks. The
+    status is chosen by the user and can be changed to any of the four at any
+    time; new goals start at `Draft`.
+    """
+
+    DRAFT = "Draft"
+    ACTIVE = "Active"
+    PAUSED = "Paused"
     COMPLETED = "Completed"
 
 class Task(Base):
@@ -63,6 +76,48 @@ class Message(Base):
     role = Column(String, nullable=False) # "user" or "assistant"
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class Goal(Base):
+    """A standalone personal goal (issue #17).
+
+    Deliberately disconnected from tasks, teams and AI planning: this issue
+    builds the goals section on its own, with no `task_id`, no progress and no
+    assignment. Editing is additive later; nothing here has to be undone.
+
+    `target_date` is a SQL `Date`, not a timestamp. A goal is targeted at a
+    calendar day, and storing it as `timestamptz` would drag the reader's UTC
+    offset into a value the user never gave a time for.
+    """
+
+    __tablename__ = "goals"
+    __table_args__ = (
+        # An ORM-side length rule protects nothing from a write that bypasses
+        # the ORM (issue #6). The API trims and bounds the title; the database
+        # independently refuses a blank or over-long one.
+        CheckConstraint(
+            "length(trim(title)) BETWEEN 1 AND 200",
+            name="goals_title_check",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # FK to Better Auth `user.id` — see docs/external-seams.md for sync contract
+    # Owner: Frontend (Better Auth). ON DELETE CASCADE: user deletion removes goals.
+    user_id = Column(String, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    target_date = Column(Date, nullable=True)
+    status = Column(
+        SQLEnum(GoalStatusEnum, name="goalstatusenum"),
+        nullable=False,
+        default=GoalStatusEnum.DRAFT,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 # --- Conversation listing (issue #13) -------------------------------------
 
@@ -144,6 +199,81 @@ class TaskListResponse(BaseModel):
     tasks: List[TaskResponse] = []
     #: None when this page is the last. Opaque; only pass it back.
     next_cursor: Optional[str] = None
+
+
+# --- Goal schemas (issue #17) ----------------------------------------------
+#
+# `GoalListResponse` is defined after `GoalResponse` on purpose: this module has
+# no `from __future__ import annotations`, so Python 3.10 (the container)  
+# evaluates each annotation while the class body runs. Naming a class defined
+# further down raises `NameError` at import — see `TaskListResponse`.
+
+
+class GoalBase(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = None
+    #: A calendar date (`YYYY-MM-DD`). Never a timestamp.
+    target_date: Optional[date] = None
+    status: GoalStatusEnum = GoalStatusEnum.DRAFT
+
+    @field_validator("title")
+    @classmethod
+    def _require_a_visible_title(cls, value: str) -> str:
+        """Trim, and refuse a title that is only whitespace.
+
+        `min_length=1` passes a string of spaces, which stores a goal the user
+        cannot see in their list. The database carries the same rule as a check
+        constraint, because a write that bypasses the ORM would not run this.
+        """
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("title must contain at least one non-space character")
+        return trimmed
+
+
+class GoalCreate(GoalBase):
+    pass
+
+
+class GoalUpdate(BaseModel):
+    """A partial edit. Only the keys the client sends are applied."""
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    target_date: Optional[date] = None
+    status: Optional[GoalStatusEnum] = None
+
+    @field_validator("title")
+    @classmethod
+    def _require_a_visible_title(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("title must contain at least one non-space character")
+        return trimmed
+
+
+class GoalResponse(GoalBase):
+    id: uuid.UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GoalListResponse(BaseModel):
+    """One page of goals, plus where the next one starts.
+
+    Same shape and the same keyset paging as `TaskListResponse`: a bare array
+    cannot express "there is more", so a client would fetch everything or stop
+    at an arbitrary point.
+    """
+
+    goals: List[GoalResponse] = []
+    #: None when this page is the last. Opaque; only pass it back.
+    next_cursor: Optional[str] = None
+
 
 class ChatRequest(BaseModel):
     conversation_id: Optional[uuid.UUID] = None

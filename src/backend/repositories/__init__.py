@@ -5,6 +5,7 @@ from repositories.conversation_repository import (
     ConversationRepository,
     SqlConversationRepository,
 )
+from repositories.goal_repository import GoalRepository, SqlGoalRepository
 from repositories.message_repository import MessageRepository, SqlMessageRepository
 from repositories.task_repository import SqlTaskRepository, TaskRepository
 
@@ -15,6 +16,9 @@ __all__ = [
     # Task
     "TaskRepository",
     "SqlTaskRepository",
+    # Goal
+    "GoalRepository",
+    "SqlGoalRepository",
     # Conversation
     "ConversationRepository",
     "SqlConversationRepository",

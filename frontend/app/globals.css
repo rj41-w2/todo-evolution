@@ -242,6 +242,31 @@
   color: var(--color-ink);
 }
 
+/* ---- Goal status pills (issue #17) ---- */
+
+/* The label always sits on an ink/ink-2 token; the status colour is the soft
+   surface behind it. That keeps every badge AA-safe in both themes, and uses
+   the semantic tokens as fills rather than as text. */
+.pill--draft {
+  background: var(--color-paper-3);
+  color: var(--color-ink-2);
+}
+
+.pill--active {
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
+}
+
+.pill--paused {
+  background: var(--color-warn-soft);
+  color: var(--color-ink);
+}
+
+.pill--completed {
+  background: var(--color-success-soft);
+  color: var(--color-ink);
+}
+
 /* ---- Filter tabs ---- */
 
 .tab {
