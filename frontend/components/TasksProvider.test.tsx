@@ -118,3 +118,25 @@ describe('TasksProvider list fetch', () => {
     expect(shown).toEqual(['TASK 3', 'TASK 1', 'TASK 2']);
   });
 });
+
+describe('TasksProvider session lookups', () => {
+  // Performance guard (docs/performance.md). Every get-session used to be a
+  // real Postgres round trip, and the provider made two of them per load — one
+  // in `initApp`, one inside `fetchTasks`. With cookieCache the call is cheap,
+  // but the contract stays: one lookup, not a per-refresh dial.
+  it('resolves the session exactly once for the initial load', async () => {
+    vi.mocked(secureFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ tasks: [task(1)], next_cursor: null }),
+    } as never);
+
+    render(
+      <TasksProvider>
+        <Probe />
+      </TasksProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('TASK 1')).toBeTruthy());
+    expect(authClient.getSession).toHaveBeenCalledTimes(1);
+  });
+});

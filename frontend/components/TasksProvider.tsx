@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { authClient } from '../lib/auth-client';
 import { secureFetch } from '../lib/api';
 import type { AuthUser, Task, TaskCreate, TaskUpdate, Status, TaskListResponse } from '../types';
@@ -34,12 +34,22 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The init effect resolves the session once and records the id here, so the
+  // refresh path does not dial `get-session` again. It used to: `initApp` and
+  // `fetchTasks` each fetched the session on every load — two auth requests
+  // before the first task read even started (measured in docs/performance.md,
+  // where each auth call took seconds against Neon).
+  const userIdRef = useRef<string | null>(null);
 
   const dismissError = useCallback(() => setError(null), []);
 
   const fetchTasks = useCallback(async () => {
-    const session = await authClient.getSession();
-    const userId = session?.data?.user?.id;
+    let userId = userIdRef.current;
+    if (!userId) {
+      const session = await authClient.getSession();
+      userId = session?.data?.user?.id ?? null;
+      userIdRef.current = userId;
+    }
     if (!userId) return;
 
     try {
@@ -62,6 +72,7 @@ export function TasksProvider({ children }: { children: React.ReactNode }) {
     const initApp = async () => {
       const session = await authClient.getSession();
       if (session?.data?.user) {
+        userIdRef.current = session.data.user.id;
         setUser(session.data.user);
         await fetchTasks();
       } else {
