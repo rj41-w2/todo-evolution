@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { ThemeToggle } from './ThemeToggle';
 import { SidebarNav } from './SidebarNav';
-import { SignOutButton } from './SignOutButton';
 import { useTasks } from './TasksProvider';
 import { useWorkspaceName } from '../lib/workspace';
 
@@ -12,14 +11,17 @@ import { useWorkspaceName } from '../lib/workspace';
  * grouped nav, and the signed-in identity with theme + sign-out. Rendered both
  * in the static sidebar and inside the mobile drawer, so the identity and theme
  * live in the shell rather than on a page. Sign-out is the same shared control
- * the settings page uses.
+ * the settings page uses. The drawer can move its theme control into its
+ * header beside the close button.
  */
 export function AppSidebar({
   onNavigate,
   className = '',
+  showThemeToggle = true,
 }: {
   onNavigate?: () => void;
   className?: string;
+  showThemeToggle?: boolean;
 }) {
   const { user } = useTasks();
   const workspaceName = useWorkspaceName();
@@ -41,23 +43,24 @@ export function AppSidebar({
         <SidebarNav onNavigate={onNavigate} />
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 px-2 pb-2">
         {user && (
           <div className="flex items-center gap-2.5 rounded-[var(--radius-input)] bg-paper-2 p-2.5">
             <div className="w-8 h-8 rounded-[var(--radius-input)] bg-accent-soft text-accent-strong flex items-center justify-center font-semibold text-xs uppercase shrink-0">
               {user.name?.charAt(0) || 'U'}
             </div>
-            <div className="min-w-0 leading-tight">
-              <p className="text-xs font-medium text-ink truncate">{user.name}</p>
-              <p className="text-micro text-muted truncate">{user.email}</p>
-            </div>
+            <span className="min-w-0 truncate text-sm text-ink" title={user.name || undefined}>
+              {user.name || 'User'}
+            </span>
           </div>
+
         )}
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          {user && <SignOutButton />}
-        </div>
+        {showThemeToggle && (
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+          </div>
+        )}
       </div>
     </div>
   );
